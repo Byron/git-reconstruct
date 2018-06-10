@@ -72,8 +72,6 @@ fn run() -> Result<(), Error> {
         commits.push(oid);
     }
     let num_commits = commits.len();
-    progress.set_style(indicatif::ProgressStyle::default_bar());
-    progress.set_length(num_commits as u64);
     for (cid, commit_oid) in commits.iter().enumerate() {
         if let Ok(object) = repo.find_object(*commit_oid, Some(git2::ObjectType::Commit)) {
             let commit = object.into_commit().expect("to have commit");
@@ -81,11 +79,13 @@ fn run() -> Result<(), Error> {
             total_refs += recurse_tree(&repo, cid, num_commits, tree, &mut lut);
         }
         progress.set_message(&format!(
-            "Table with {} blobs and a total of {} back-refs",
+            "{}/{} Commits done; Table with {} blobs and a total of {} back-refs",
+            cid,
+            num_commits,
             lut.len(),
             total_refs
         ));
-        progress.set_position(cid as u64);
+        progress.tick();
     }
     progress.finish_and_clear();
     eprintln!(

@@ -7,9 +7,6 @@ extern crate indicatif;
 use failure::{Error, ResultExt};
 use failure_tools::ok_or_exit;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 
 const PROGRESS_RESOLUTION: usize = 250;
@@ -19,11 +16,9 @@ fn recurse_tree(
     commit_oid: &git2::Oid,
     tree: git2::Tree,
     lut: &mut BTreeMap<git2::Oid, Vec<git2::Oid>>,
-    path: &mut PathBuf,
 ) {
     use git2::ObjectType::*;
     for item in tree.iter() {
-        path.push(OsStr::from_bytes(item.name_bytes()));
         match item.kind() {
             Some(Tree) => recurse_tree(
                 repo,
@@ -33,7 +28,6 @@ fn recurse_tree(
                     .into_tree()
                     .expect("tree"),
                 lut,
-                path,
             ),
             Some(Blob) => lut.entry(item.id())
                 .or_insert_with(|| Vec::new())
@@ -66,8 +60,7 @@ fn run() -> Result<(), Error> {
         if let Ok(object) = repo.find_object(oid, Some(git2::ObjectType::Commit)) {
             let commit = object.into_commit().expect("to have commit");
             let tree = commit.tree().expect("commit to have tree");
-            let mut path = PathBuf::new();
-            recurse_tree(&repo, &oid, tree, &mut lut, &mut path);
+            recurse_tree(&repo, &oid, tree, &mut lut);
         }
     }
     progress.finish_and_clear();

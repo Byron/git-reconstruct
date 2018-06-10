@@ -133,7 +133,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "git-commits-by-blob"
-version = "1.1.0"
+version = "1.0.0"
 dependencies = [
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure-tools 4.0.2 (registry+https://github.com/rust-lang/crates.io-index)",

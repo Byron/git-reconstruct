@@ -12,7 +12,6 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 use bit_vec::BitVec;
 
 const COMMITS_PROGRESS_RESOLUTION: usize = 250;
-const TREES_PROGRESS_RESOLUTION: usize = 10;
 
 fn recurse_tree(
     repo: &git2::Repository,
@@ -73,20 +72,20 @@ fn run() -> Result<(), Error> {
         commits.push(oid);
     }
     let num_commits = commits.len();
+    progress.set_style(indicatif::ProgressStyle::default_bar());
+    progress.set_length(num_commits as u64);
     for (cid, commit_oid) in commits.iter().enumerate() {
         if let Ok(object) = repo.find_object(*commit_oid, Some(git2::ObjectType::Commit)) {
             let commit = object.into_commit().expect("to have commit");
             let tree = commit.tree().expect("commit to have tree");
             total_refs += recurse_tree(&repo, cid, num_commits, tree, &mut lut);
         }
-        if cid % TREES_PROGRESS_RESOLUTION == 0 {
-            progress.set_message(&format!(
-                "Table with {} blobs and a total of {} refs",
-                lut.len(),
-                total_refs
-            ));
-            progress.tick();
-        }
+        progress.set_message(&format!(
+            "Table with {} blobs and a total of {} back-refs",
+            lut.len(),
+            total_refs
+        ));
+        progress.set_position(cid as u64);
     }
     progress.finish_and_clear();
     eprintln!(

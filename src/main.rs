@@ -16,25 +16,32 @@ fn recurse_tree(
     commit_oid: &git2::Oid,
     tree: git2::Tree,
     lut: &mut BTreeMap<git2::Oid, Vec<git2::Oid>>,
-) {
+) -> usize {
     use git2::ObjectType::*;
+    let mut refs = 0;
     for item in tree.iter() {
         match item.kind() {
-            Some(Tree) => recurse_tree(
-                repo,
-                commit_oid,
-                item.to_object(repo)
-                    .expect("valid object")
-                    .into_tree()
-                    .expect("tree"),
-                lut,
-            ),
-            Some(Blob) => lut.entry(item.id())
-                .or_insert_with(|| Vec::new())
-                .push(commit_oid.clone()),
+            Some(Tree) => {
+                refs += recurse_tree(
+                    repo,
+                    commit_oid,
+                    item.to_object(repo)
+                        .expect("valid object")
+                        .into_tree()
+                        .expect("tree"),
+                    lut,
+                )
+            }
+            Some(Blob) => {
+                refs += 1;
+                lut.entry(item.id())
+                    .or_insert_with(|| Vec::new())
+                    .push(commit_oid.clone())
+            }
             _ => continue,
         }
     }
+    refs
 }
 
 fn run() -> Result<(), Error> {
@@ -43,7 +50,7 @@ fn run() -> Result<(), Error> {
         .next()
         .ok_or_else(|| format_err!("USAGE: <me> <repository>"))?)?;
     let mut walk = repo.revwalk()?;
-    let mut num_commits = 0;
+    let (mut num_commits, mut total_refs) = (0, 0);
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
     walk.push_head()?;
 
@@ -54,20 +61,26 @@ fn run() -> Result<(), Error> {
     for oid in walk.filter_map(Result::ok) {
         num_commits += 1;
         if num_commits % PROGRESS_RESOLUTION == 0 {
-            progress.set_message(&format!("Indexed {} commits...", num_commits));
+            progress.set_message(&format!(
+                "Indexed {} commits with {} blobs and a total of {} parent-commit refs...",
+                num_commits,
+                lut.len(),
+                total_refs
+            ));
             progress.tick();
         }
         if let Ok(object) = repo.find_object(oid, Some(git2::ObjectType::Commit)) {
             let commit = object.into_commit().expect("to have commit");
             let tree = commit.tree().expect("commit to have tree");
-            recurse_tree(&repo, &oid, tree, &mut lut);
+            total_refs += recurse_tree(&repo, &oid, tree, &mut lut);
         }
     }
     progress.finish_and_clear();
     eprintln!(
-        "READY: Build cache from {} commits with table of {} blobs",
+        "READY: Build cache from {} commits with table of {} blobs and {} refs",
         num_commits,
-        lut.len()
+        lut.len(),
+        total_refs
     );
 
     let stdin = stdin();

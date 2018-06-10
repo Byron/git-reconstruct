@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
-use std::io::{stdin, stdout, BufRead, BufReader};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 
 const PROGRESS_RESOLUTION: usize = 250;
 
@@ -80,9 +80,20 @@ fn run() -> Result<(), Error> {
     let stdin = stdin();
     let read = BufReader::new(stdin.lock());
     let stdout = stdout();
+    let mut out = BufWriter::new(stdout.lock());
 
     for hexsha in read.lines().filter_map(Result::ok) {
-        git2::Oid::from_str(&hexsha)?;
+        let oid = git2::Oid::from_str(&hexsha)?;
+        match lut.get(&oid) {
+            None => writeln!(out)?,
+            Some(commits) => {
+                for oid in commits {
+                    write!(out, "{} ", oid)?;
+                }
+                writeln!(out)?
+            }
+        }
+        out.flush()?;
     }
 
     Ok(())

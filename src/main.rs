@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate failure;
+extern crate bit_vec;
 extern crate failure_tools;
 extern crate git2;
 extern crate indicatif;
@@ -8,14 +9,17 @@ use failure::{Error, ResultExt};
 use failure_tools::ok_or_exit;
 use std::collections::BTreeMap;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
+use bit_vec::BitVec;
 
-const PROGRESS_RESOLUTION: usize = 10;
+const COMMITS_PROGRESS_RESOLUTION: usize = 250;
+const TREES_PROGRESS_RESOLUTION: usize = 10;
 
 fn recurse_tree(
     repo: &git2::Repository,
-    commit_oid: &git2::Oid,
+    commit_idx: usize,
+    num_commits: usize,
     tree: git2::Tree,
-    lut: &mut BTreeMap<git2::Oid, Vec<git2::Oid>>,
+    lut: &mut BTreeMap<git2::Oid, BitVec>,
 ) -> usize {
     use git2::ObjectType::*;
     let mut refs = 0;
@@ -24,7 +28,8 @@ fn recurse_tree(
             Some(Tree) => {
                 refs += recurse_tree(
                     repo,
-                    commit_oid,
+                    commit_idx,
+                    num_commits,
                     item.to_object(repo)
                         .expect("valid object")
                         .into_tree()
@@ -35,8 +40,8 @@ fn recurse_tree(
             Some(Blob) => {
                 refs += 1;
                 lut.entry(item.id())
-                    .or_insert_with(|| Vec::new())
-                    .push(commit_oid.clone())
+                    .or_insert_with(|| BitVec::from_elem(num_commits, false))
+                    .set(commit_idx, true)
             }
             _ => continue,
         }
@@ -50,29 +55,37 @@ fn run() -> Result<(), Error> {
         .next()
         .ok_or_else(|| format_err!("USAGE: <me> <repository>"))?)?;
     let mut walk = repo.revwalk()?;
-    let (mut num_commits, mut total_refs) = (0, 0);
+    let (mut iteration_count, mut total_refs) = (0, 0);
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
     walk.push_head()?;
 
-    let mut lut = BTreeMap::<git2::Oid, Vec<git2::Oid>>::new();
+    let mut lut = BTreeMap::new();
+    let mut commits = Vec::new();
     let progress = indicatif::ProgressBar::new_spinner();
     progress.set_draw_target(indicatif::ProgressDrawTarget::stderr());
 
     for oid in walk.filter_map(Result::ok) {
-        num_commits += 1;
-        if num_commits % PROGRESS_RESOLUTION == 0 {
+        iteration_count += 1;
+        if iteration_count % COMMITS_PROGRESS_RESOLUTION == 0 {
+            progress.set_message(&format!("Traversed {} commits...", iteration_count,));
+            progress.tick();
+        }
+        commits.push(oid);
+    }
+    let num_commits = commits.len();
+    for (cid, commit_oid) in commits.iter().enumerate() {
+        if let Ok(object) = repo.find_object(*commit_oid, Some(git2::ObjectType::Commit)) {
+            let commit = object.into_commit().expect("to have commit");
+            let tree = commit.tree().expect("commit to have tree");
+            total_refs += recurse_tree(&repo, cid, num_commits, tree, &mut lut);
+        }
+        if cid % TREES_PROGRESS_RESOLUTION == 0 {
             progress.set_message(&format!(
-                "Indexed {} commits with {} blobs and a total of {} parent-commit refs...",
-                num_commits,
+                "Table with {} blobs and a total of {} refs",
                 lut.len(),
                 total_refs
             ));
             progress.tick();
-        }
-        if let Ok(object) = repo.find_object(oid, Some(git2::ObjectType::Commit)) {
-            let commit = object.into_commit().expect("to have commit");
-            let tree = commit.tree().expect("commit to have tree");
-            total_refs += recurse_tree(&repo, &oid, tree, &mut lut);
         }
     }
     progress.finish_and_clear();
@@ -92,9 +105,13 @@ fn run() -> Result<(), Error> {
         let oid = git2::Oid::from_str(&hexsha)?;
         match lut.get(&oid) {
             None => writeln!(out)?,
-            Some(commits) => {
-                for oid in commits {
-                    write!(out, "{} ", oid)?;
+            Some(commits_indices) => {
+                for cidx in commits_indices
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, seen)| if seen { Some(idx) } else { None })
+                {
+                    write!(out, "{} ", commits[cidx])?;
                 }
                 writeln!(out)?
             }

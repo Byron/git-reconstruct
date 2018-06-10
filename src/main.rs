@@ -9,7 +9,7 @@ use failure_tools::ok_or_exit;
 use std::collections::BTreeMap;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 
-const PROGRESS_RESOLUTION: usize = 250;
+const PROGRESS_RESOLUTION: usize = 10;
 
 fn recurse_tree(
     repo: &git2::Repository,

@@ -9,6 +9,7 @@ use failure_tools::ok_or_exit;
 use std::collections::{BTreeMap, btree_map::Entry};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 use git2::{Oid, Repository};
+use std::mem;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
 
@@ -85,6 +86,7 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
         if let Ok(object) = repo.find_object(commit_oid, Some(git2::ObjectType::Commit)) {
             let commit = object.into_commit().expect("to have commit");
             let tree = commit.tree().expect("commit to have tree");
+            lut.insert(commit_oid, Capsule::Normal(Vec::new()));
             if insert_parent_and_has_not_seen_child(commit_oid, tree.id(), &mut lut) {
                 total_refs += recurse_tree(&repo, tree, &mut lut);
             }
@@ -102,9 +104,7 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
 
     progress.finish_and_clear();
     eprintln!("Compacting memory...");
-    //    for value in lut.values_mut() {
-    //        value.shrink_to_fit();
-    //    }
+    compact_memory(&mut lut);
     eprintln!(
         "READY: Build reverse-tree from {} commits with table of {} entries and {} parent-edges",
         num_commits,
@@ -112,6 +112,23 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
         total_refs
     );
     Ok(lut)
+}
+
+fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>) -> () {
+    let all_oids: Vec<_> = lut.keys().cloned().collect();
+    for capsule in lut.values_mut() {
+        let mut compacted = Vec::new();
+        if let Capsule::Normal(ref mut parent_oids) = capsule {
+            compacted = Vec::with_capacity(parent_oids.len());
+            for oid in parent_oids {
+                let parent_idx = all_oids
+                    .binary_search(oid)
+                    .expect("parent to be found in sorted list");
+                compacted.push(parent_idx);
+            }
+        }
+        mem::replace(capsule, Capsule::Compact(compacted));
+    }
 }
 
 fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Error> {

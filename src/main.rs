@@ -9,7 +9,7 @@ use failure::{Error, ResultExt};
 use failure_tools::ok_or_exit;
 use std::{mem, collections::{BTreeMap, btree_map::Entry},
           io::{stdin, stdout, BufRead, BufReader, BufWriter, Write}, path::PathBuf};
-use git2::{Oid, Repository};
+use git2::{ObjectType, Oid, Repository, Revwalk, Tree};
 use indicatif::ProgressBar;
 use structopt::StructOpt;
 
@@ -24,6 +24,12 @@ struct Options {
     /// for queries
     #[structopt(long = "no-compact")]
     no_compact: bool,
+
+    /// If set, traversal will only happen along the checked-out head.
+    /// Otherwise it will take into consideration all remote branches, too
+    /// Also useful for bare-repositories
+    #[structopt(long = "head-only")]
+    head_only: bool,
 
     /// the repository to index for queries
     #[structopt(name = "REPOSITORY", parse(from_os_str))]
@@ -55,12 +61,8 @@ fn insert_parent_and_has_not_seen_child(
     }
 }
 
-fn recurse_tree(
-    repo: &git2::Repository,
-    tree: git2::Tree,
-    lut: &mut BTreeMap<Oid, Capsule>,
-) -> usize {
-    use git2::ObjectType::*;
+fn recurse_tree(repo: &Repository, tree: Tree, lut: &mut BTreeMap<Oid, Capsule>) -> usize {
+    use ObjectType::*;
     let mut refs = 0;
     for item in tree.iter() {
         match item.kind() {
@@ -90,18 +92,22 @@ fn recurse_tree(
     refs
 }
 
-fn build_lut(repo: &Repository, compact: bool) -> Result<BTreeMap<Oid, Capsule>, Error> {
+fn build_lut(
+    repo: &Repository,
+    compact: bool,
+    head_only: bool,
+) -> Result<BTreeMap<Oid, Capsule>, Error> {
     let mut walk = repo.revwalk()?;
     let mut total_refs = 0;
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
-    walk.push_head()?;
+    setup_walk(repo, &mut walk, head_only)?;
     let mut num_commits = 0;
     let progress = ProgressBar::new_spinner();
     progress.set_draw_target(indicatif::ProgressDrawTarget::stderr());
     let mut lut = walk.filter_map(Result::ok)
         .fold(BTreeMap::new(), |mut lut, commit_oid| {
             num_commits += 1;
-            if let Ok(object) = repo.find_object(commit_oid, Some(git2::ObjectType::Commit)) {
+            if let Ok(object) = repo.find_object(commit_oid, Some(ObjectType::Commit)) {
                 let commit = object.into_commit().expect("to have commit");
                 let tree = commit.tree().expect("commit to have tree");
                 lut.insert(commit_oid, Capsule::Normal(Vec::new()));
@@ -137,6 +143,22 @@ fn build_lut(repo: &Repository, compact: bool) -> Result<BTreeMap<Oid, Capsule>,
     Ok(lut)
 }
 
+fn setup_walk(repo: &Repository, walk: &mut Revwalk, head_only: bool) -> Result<(), Error> {
+    if head_only {
+        walk.push_head()?;
+    } else {
+        for remote_head in repo.branches(Some(git2::BranchType::Remote))?
+            .filter_map(|b| {
+                b.map(|(b, _bt)| b)
+                    .ok()
+                    .and_then(|b| b.get().target())
+            }) {
+            walk.push(remote_head)?;
+        }
+    }
+    Ok(())
+}
+
 fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>, progress: &ProgressBar) -> () {
     let all_oids: Vec<_> = lut.keys().cloned().collect();
     for (cid, capsule) in lut.values_mut().enumerate() {
@@ -158,7 +180,7 @@ fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>, progress: &ProgressBar) -> (
     }
 }
 
-fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Error> {
+fn deplete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Error> {
     let stdin = stdin();
     let read = BufReader::new(stdin.lock());
     let stdout = stdout();
@@ -205,6 +227,7 @@ fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Erro
                         None => unreachable!("Every item we see must be in the LUT"),
                     }
                 }
+                writeln!(out)?
             }
         }
         out.flush()?;
@@ -213,10 +236,10 @@ fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Erro
 }
 
 fn run(opts: Options) -> Result<(), Error> {
-    let repo = git2::Repository::open(opts.repository)?;
+    let repo = Repository::open(opts.repository)?;
 
-    let lut = build_lut(&repo, !opts.no_compact)?;
-    depelete_requests_from_stdin(&lut)
+    let lut = build_lut(&repo, !opts.no_compact, opts.head_only)?;
+    deplete_requests_from_stdin(&lut)
 }
 
 fn main() {

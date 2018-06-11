@@ -1,47 +1,60 @@
 #[macro_use]
 extern crate failure;
-extern crate bit_vec;
 extern crate failure_tools;
 extern crate git2;
 extern crate indicatif;
 
 use failure::{Error, ResultExt};
 use failure_tools::ok_or_exit;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::Entry};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
-use bit_vec::BitVec;
 use git2::{Oid, Repository};
 
 const COMMITS_PROGRESS_RESOLUTION: usize = 250;
 
+fn insert_parent_and_has_not_seen_child(
+    parent_oid: Oid,
+    child_oid: Oid,
+    lut: &mut BTreeMap<Oid, Vec<Oid>>,
+) -> bool {
+    match lut.entry(child_oid) {
+        Entry::Occupied(mut entry) => {
+            entry.get_mut().push(parent_oid);
+            false
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(vec![parent_oid]);
+            true
+        }
+    }
+}
+
 fn recurse_tree(
     repo: &git2::Repository,
-    commit_idx: usize,
-    num_commits: usize,
     tree: git2::Tree,
-    lut: &mut BTreeMap<Oid, BitVec>,
+    lut: &mut BTreeMap<Oid, Vec<Oid>>,
 ) -> usize {
     use git2::ObjectType::*;
     let mut refs = 0;
     for item in tree.iter() {
         match item.kind() {
             Some(Tree) => {
-                refs += recurse_tree(
-                    repo,
-                    commit_idx,
-                    num_commits,
-                    item.to_object(repo)
-                        .expect("valid object")
-                        .into_tree()
-                        .expect("tree"),
-                    lut,
-                )
+                if insert_parent_and_has_not_seen_child(tree.id(), item.id(), lut) {
+                    refs += recurse_tree(
+                        repo,
+                        item.to_object(repo)
+                            .expect("valid object")
+                            .into_tree()
+                            .expect("tree"),
+                        lut,
+                    )
+                }
             }
             Some(Blob) => {
                 refs += 1;
                 lut.entry(item.id())
-                    .or_insert_with(|| BitVec::from_elem(num_commits, false))
-                    .set(commit_idx, true)
+                    .or_insert_with(Vec::new)
+                    .push(tree.id())
             }
             _ => continue,
         }
@@ -49,8 +62,7 @@ fn recurse_tree(
     refs
 }
 
-
-fn build_lut(repo: &Repository) -> Result<(BTreeMap<Oid, BitVec<u32>>, Vec<Oid>), Error> {
+fn build_lut(repo: &Repository) -> Result<(BTreeMap<Oid, Vec<Oid>>, Vec<Oid>), Error> {
     let mut walk = repo.revwalk()?;
     let (mut iteration_count, mut total_refs) = (0, 0);
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
@@ -72,7 +84,9 @@ fn build_lut(repo: &Repository) -> Result<(BTreeMap<Oid, BitVec<u32>>, Vec<Oid>)
         if let Ok(object) = repo.find_object(*commit_oid, Some(git2::ObjectType::Commit)) {
             let commit = object.into_commit().expect("to have commit");
             let tree = commit.tree().expect("commit to have tree");
-            total_refs += recurse_tree(&repo, cid, num_commits, tree, &mut lut);
+            if insert_parent_and_has_not_seen_child(*commit_oid, tree.id(), &mut lut) {
+                total_refs += recurse_tree(&repo, tree, &mut lut);
+            }
         }
         progress.set_message(&format!(
             "{}/{} Commits done; Table with {} blobs and a total of {} back-refs",
@@ -94,7 +108,7 @@ fn build_lut(repo: &Repository) -> Result<(BTreeMap<Oid, BitVec<u32>>, Vec<Oid>)
 }
 
 fn depelete_requests_from_stdin(
-    lut: &mut BTreeMap<Oid, BitVec<u32>>,
+    lut: &mut BTreeMap<Oid, Vec<Oid>>,
     commits: &mut Vec<Oid>,
 ) -> Result<(), Error> {
     let stdin = stdin();
@@ -106,13 +120,14 @@ fn depelete_requests_from_stdin(
         match lut.get(&oid) {
             None => writeln!(out)?,
             Some(commits_indices) => {
-                for cidx in commits_indices
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(idx, seen)| if seen { Some(idx) } else { None })
-                {
-                    write!(out, "{} ", commits[cidx])?;
-                }
+                // TODO: traversal
+                //                for cidx in commits_indices
+                //                    .iter()
+                //                    .enumerate()
+                //                    .filter_map(|(idx, seen)| if seen { Some(idx) } else { None })
+                //                {
+                //                    write!(out, "{} ", commits[cidx])?;
+                //                }
                 writeln!(out)?
             }
         }

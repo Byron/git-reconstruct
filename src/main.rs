@@ -87,6 +87,10 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Vec<Oid>>, Error> {
         progress.tick();
     }
     progress.finish_and_clear();
+    eprintln!("Compacting memory...");
+    for value in lut.values_mut() {
+        value.shrink_to_fit();
+    }
     eprintln!(
         "READY: Build reverse-tree from {} commits with table of {} entries and {} parent-edges",
         num_commits,

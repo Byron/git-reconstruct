@@ -7,7 +7,7 @@ extern crate structopt;
 extern crate crossbeam;
 extern crate num_cpus;
 
-use failure::{Error, ResultExt};
+use failure::Error;
 use failure_tools::ok_or_exit;
 use std::{mem, collections::{BTreeMap, btree_map::Entry},
           io::{stdin, stdout, BufRead, BufReader, BufWriter, Write}, path::PathBuf};
@@ -184,7 +184,7 @@ fn setup_walk(repo: &Repository, walk: &mut Revwalk, head_only: bool) -> Result<
         }
         if refs_pushed == 0 {
             eprintln!(
-                "Didn't find a single remote - pushing head instead to avoid empty traversal"
+                "Didn't find a single remote - using head instead to avoid empty traversal"
             );
             walk.push_head()?;
         }
@@ -277,5 +277,5 @@ fn run(opts: Options) -> Result<(), Error> {
 }
 
 fn main() {
-    ok_or_exit(run(Options::from_args()).with_context(|_| "Failed to count git objects"))
+    ok_or_exit(run(Options::from_args()));
 }

@@ -105,15 +105,14 @@ fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Vec<Oid>>) -> Result<(), Err
         let oid = Oid::from_str(&hexsha)?;
         match lut.get(&oid) {
             None => writeln!(out)?,
-            Some(commits_indices) => {
-                // TODO: traversal
-                //                for cidx in commits_indices
-                //                    .iter()
-                //                    .enumerate()
-                //                    .filter_map(|(idx, seen)| if seen { Some(idx) } else { None })
-                //                {
-                //                    write!(out, "{} ", commits[cidx])?;
-                //                }
+            Some(parents) => {
+                let mut oids_to_traverse = parents.clone();
+                while let Some(oid) = oids_to_traverse.pop() {
+                    match lut.get(&oid) {
+                        Some(parents) => oids_to_traverse.extend(parents),
+                        None => write!(out, "{} ", oid)?,
+                    }
+                }
                 writeln!(out)?
             }
         }

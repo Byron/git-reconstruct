@@ -4,7 +4,9 @@ extern crate git2;
 extern crate indicatif;
 #[macro_use]
 extern crate structopt;
+extern crate rayon;
 
+use rayon::prelude::*;
 use failure::{Error, ResultExt};
 use failure_tools::ok_or_exit;
 use std::{mem, collections::{BTreeMap, btree_map::Entry},
@@ -92,48 +94,53 @@ fn recurse_tree(repo: &Repository, tree: Tree, lut: &mut BTreeMap<Oid, Capsule>)
     refs
 }
 
-fn build_lut(
-    repo: &Repository,
-    compact: bool,
-    head_only: bool,
-) -> Result<BTreeMap<Oid, Capsule>, Error> {
-    let mut walk = repo.revwalk()?;
+fn build_lut(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
     let mut total_refs = 0;
+    let repo = Repository::open(opts.repository)?;
 
-    walk.set_sorting(git2::Sort::TOPOLOGICAL);
-    setup_walk(repo, &mut walk, head_only)?;
+    let commits: Vec<_> = {
+        let mut walk = repo.revwalk()?;
+        walk.set_sorting(git2::Sort::TOPOLOGICAL);
+        setup_walk(&repo, &mut walk, opts.head_only)?;
+        walk.filter_map(Result::ok).collect()
+    };
 
     let mut num_commits = 0;
     let progress = ProgressBar::new_spinner();
     progress.set_draw_target(indicatif::ProgressDrawTarget::stderr());
-    let mut lut = walk.filter_map(Result::ok)
-        .fold(BTreeMap::new(), |mut lut, commit_oid| {
-            num_commits += 1;
-            if let Ok(object) = repo.find_object(commit_oid, Some(ObjectType::Commit)) {
-                let commit = object.into_commit().expect("to have commit");
-                let tree = commit.tree().expect("commit to have tree");
-                lut.insert(commit_oid, Capsule::Normal(Vec::new()));
-                if insert_parent_and_has_not_seen_child(commit_oid, tree.id(), &mut lut) {
-                    total_refs += recurse_tree(&repo, tree, &mut lut);
+    let mut lut: Vec<_> = commits
+        .par_iter()
+        .fold(
+            || BTreeMap::new(),
+            |mut lut, &commit_oid| {
+                num_commits += 1;
+                if let Ok(object) = repo.find_object(commit_oid, Some(ObjectType::Commit)) {
+                    let commit = object.into_commit().expect("to have commit");
+                    let tree = commit.tree().expect("commit to have tree");
+                    lut.insert(commit_oid, Capsule::Normal(Vec::new()));
+                    if insert_parent_and_has_not_seen_child(commit_oid, tree.id(), &mut lut) {
+                        total_refs += recurse_tree(&repo, tree, &mut lut);
+                    }
                 }
-            }
-            if num_commits % COMMIT_PROGRESS_RATE == 0 {
-                progress.set_message(&format!(
+                if num_commits % COMMIT_PROGRESS_RATE == 0 {
+                    progress.set_message(&format!(
                     "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
                     num_commits,
                     lut.len(),
                     total_refs
                 ));
-                progress.tick();
-            }
-            lut
-        });
+                    progress.tick();
+                }
+                lut
+            },
+        )
+        .collect();
 
-    if compact {
-        compact_memory(&mut lut, &progress);
-    } else {
-        eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")
-    }
+    //    if !opts.no_compact {
+    //        compact_memory(&mut lut, &progress);
+    //    } else {
+    //        eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")
+    //    }
 
     progress.finish_and_clear();
     eprintln!(
@@ -243,9 +250,7 @@ fn deplete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Error
 }
 
 fn run(opts: Options) -> Result<(), Error> {
-    let repo = Repository::open(opts.repository)?;
-
-    let lut = build_lut(&repo, !opts.no_compact, opts.head_only)?;
+    let lut = build_lut(opts)?;
     deplete_requests_from_stdin(&lut)
 }
 

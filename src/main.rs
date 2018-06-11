@@ -10,6 +10,7 @@ use failure_tools::ok_or_exit;
 use std::collections::BTreeMap;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 use bit_vec::BitVec;
+use git2::{Oid, Repository};
 
 const COMMITS_PROGRESS_RESOLUTION: usize = 250;
 
@@ -18,7 +19,7 @@ fn recurse_tree(
     commit_idx: usize,
     num_commits: usize,
     tree: git2::Tree,
-    lut: &mut BTreeMap<git2::Oid, BitVec>,
+    lut: &mut BTreeMap<Oid, BitVec>,
 ) -> usize {
     use git2::ObjectType::*;
     let mut refs = 0;
@@ -48,21 +49,16 @@ fn recurse_tree(
     refs
 }
 
-fn run() -> Result<(), Error> {
-    let repo = git2::Repository::open(std::env::args()
-        .skip(1)
-        .next()
-        .ok_or_else(|| format_err!("USAGE: <me> <repository>"))?)?;
+
+fn build_lut(repo: &Repository) -> Result<(BTreeMap<Oid, BitVec<u32>>, Vec<Oid>), Error> {
     let mut walk = repo.revwalk()?;
     let (mut iteration_count, mut total_refs) = (0, 0);
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
     walk.push_head()?;
-
     let mut lut = BTreeMap::new();
     let mut commits = Vec::new();
     let progress = indicatif::ProgressBar::new_spinner();
     progress.set_draw_target(indicatif::ProgressDrawTarget::stderr());
-
     for oid in walk.filter_map(Result::ok) {
         iteration_count += 1;
         if iteration_count % COMMITS_PROGRESS_RESOLUTION == 0 {
@@ -94,14 +90,19 @@ fn run() -> Result<(), Error> {
         lut.len(),
         total_refs
     );
+    Ok((lut, commits))
+}
 
+fn depelete_requests_from_stdin(
+    lut: &mut BTreeMap<Oid, BitVec<u32>>,
+    commits: &mut Vec<Oid>,
+) -> Result<(), Error> {
     let stdin = stdin();
     let read = BufReader::new(stdin.lock());
     let stdout = stdout();
     let mut out = BufWriter::new(stdout.lock());
-
     for hexsha in read.lines().filter_map(Result::ok) {
-        let oid = git2::Oid::from_str(&hexsha)?;
+        let oid = Oid::from_str(&hexsha)?;
         match lut.get(&oid) {
             None => writeln!(out)?,
             Some(commits_indices) => {
@@ -117,8 +118,17 @@ fn run() -> Result<(), Error> {
         }
         out.flush()?;
     }
-
     Ok(())
+}
+
+fn run() -> Result<(), Error> {
+    let repo = git2::Repository::open(std::env::args()
+        .skip(1)
+        .next()
+        .ok_or_else(|| format_err!("USAGE: <me> <repository>"))?)?;
+
+    let (mut lut, mut commits) = build_lut(&repo)?;
+    depelete_requests_from_stdin(&mut lut, &mut commits)
 }
 
 fn main() {

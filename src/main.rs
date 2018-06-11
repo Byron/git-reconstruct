@@ -12,18 +12,25 @@ use git2::{Oid, Repository};
 
 const COMMIT_PROGRESS_RATE: usize = 100;
 
+enum Capsule {
+    Normal(Vec<Oid>),
+    Compact(Vec<usize>),
+}
+
 fn insert_parent_and_has_not_seen_child(
     parent_oid: Oid,
     child_oid: Oid,
-    lut: &mut BTreeMap<Oid, Vec<Oid>>,
+    lut: &mut BTreeMap<Oid, Capsule>,
 ) -> bool {
     match lut.entry(child_oid) {
         Entry::Occupied(mut entry) => {
-            entry.get_mut().push(parent_oid);
+            if let Capsule::Normal(ref mut parents) = entry.get_mut() {
+                parents.push(parent_oid);
+            }
             false
         }
         Entry::Vacant(entry) => {
-            entry.insert(vec![parent_oid]);
+            entry.insert(Capsule::Normal(vec![parent_oid]));
             true
         }
     }
@@ -32,7 +39,7 @@ fn insert_parent_and_has_not_seen_child(
 fn recurse_tree(
     repo: &git2::Repository,
     tree: git2::Tree,
-    lut: &mut BTreeMap<Oid, Vec<Oid>>,
+    lut: &mut BTreeMap<Oid, Capsule>,
 ) -> usize {
     use git2::ObjectType::*;
     let mut refs = 0;
@@ -52,9 +59,11 @@ fn recurse_tree(
             }
             Some(Blob) => {
                 refs += 1;
-                lut.entry(item.id())
-                    .or_insert_with(Vec::new)
-                    .push(tree.id())
+                if let Capsule::Normal(ref mut parents) = lut.entry(item.id())
+                    .or_insert_with(|| Capsule::Normal(Vec::new()))
+                {
+                    parents.push(tree.id());
+                }
             }
             _ => continue,
         }
@@ -62,7 +71,7 @@ fn recurse_tree(
     refs
 }
 
-fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Vec<Oid>>, Error> {
+fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
     let mut walk = repo.revwalk()?;
     let mut total_refs = 0;
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
@@ -90,11 +99,12 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Vec<Oid>>, Error> {
             progress.tick();
         }
     }
+
     progress.finish_and_clear();
     eprintln!("Compacting memory...");
-    for value in lut.values_mut() {
-        value.shrink_to_fit();
-    }
+    //    for value in lut.values_mut() {
+    //        value.shrink_to_fit();
+    //    }
     eprintln!(
         "READY: Build reverse-tree from {} commits with table of {} entries and {} parent-edges",
         num_commits,
@@ -104,7 +114,7 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Vec<Oid>>, Error> {
     Ok(lut)
 }
 
-fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Vec<Oid>>) -> Result<(), Error> {
+fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Error> {
     let stdin = stdin();
     let read = BufReader::new(stdin.lock());
     let stdout = stdout();
@@ -114,16 +124,18 @@ fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Vec<Oid>>) -> Result<(), Err
         let oid = Oid::from_str(&hexsha)?;
         match lut.get(&oid) {
             None => writeln!(out)?,
-            Some(parents) => {
+            Some(Capsule::Normal(parents)) => {
                 let mut oids_to_traverse = parents.clone();
                 while let Some(oid) = oids_to_traverse.pop() {
                     match lut.get(&oid) {
-                        Some(parents) => oids_to_traverse.extend(parents),
+                        Some(Capsule::Normal(parents)) => oids_to_traverse.extend(parents),
                         None => write!(out, "{} ", oid)?,
+                        _ => unimplemented!(),
                     }
                 }
                 writeln!(out)?
             }
+            _ => unimplemented!(),
         }
         out.flush()?;
     }

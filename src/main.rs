@@ -22,6 +22,10 @@ const COMPACTION_PROGRESS_RATE: usize = 10000;
 #[derive(StructOpt, Debug)]
 #[structopt(name = "git-commits-by-blob")]
 struct Options {
+    /// The amount of threads to use. If unset, defaults to amount of physical CPUs
+    #[structopt(short = "t", long = "threads")]
+    threads: Option<usize>,
+
     /// If set, you will trade in about 35% increase in memory for about 30% less time till ready
     /// for queries
     #[structopt(long = "no-compact")]
@@ -107,7 +111,7 @@ fn build_lut(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
     let multiprogress = indicatif::MultiProgress::new();
 
     let mut luts: Vec<BTreeMap<Oid, Capsule>> = Vec::new();
-    let num_threads = num_cpus::get_physical();
+    let num_threads = opts.threads.unwrap_or_else(num_cpus::get_physical);
     let mut total_refs = 0;
 
     crossbeam::scope(|scope| {

@@ -95,7 +95,6 @@ fn recurse_tree(repo: &Repository, tree: Tree, lut: &mut BTreeMap<Oid, Capsule>)
 }
 
 fn build_lut(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
-    let mut total_refs = 0;
     let repo = Repository::open(&opts.repository)?;
 
     let commits: Vec<_> = {
@@ -210,65 +209,67 @@ fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>, progress: &ProgressBar) -> (
     }
 }
 
-fn deplete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Error> {
+fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
     let stdin = stdin();
     let read = BufReader::new(stdin.lock());
     let stdout = stdout();
     let mut out = BufWriter::new(stdout.lock());
-    let all_oids: Vec<_> = lut.keys().cloned().collect();
+    let all_oids: Vec<Vec<_>> = luts.iter()
+        .map(|lut| lut.keys().cloned().collect())
+        .collect();
     eprintln!("Waiting for input...");
     for hexsha in read.lines().filter_map(Result::ok) {
         let oid = Oid::from_str(&hexsha)?;
-        match lut.get(&oid) {
-            None => writeln!(out)?,
-            Some(Capsule::Compact(parent_indices)) => {
-                let mut indices_to_traverse = parent_indices.clone();
-                while let Some(idx) = indices_to_traverse.pop() {
-                    match lut.get(&all_oids[idx]) {
-                        Some(Capsule::Compact(parent_indices)) => {
-                            if parent_indices.is_empty() {
-                                write!(out, "{} ", all_oids[idx])?
-                            } else {
-                                indices_to_traverse.extend(parent_indices)
+        for (lid, lut) in luts.iter().enumerate() {
+            match lut.get(&oid) {
+                None => writeln!(out)?,
+                Some(Capsule::Compact(parent_indices)) => {
+                    let mut indices_to_traverse = parent_indices.clone();
+                    while let Some(idx) = indices_to_traverse.pop() {
+                        match lut.get(&all_oids[lid][idx]) {
+                            Some(Capsule::Compact(parent_indices)) => {
+                                if parent_indices.is_empty() {
+                                    write!(out, "{} ", all_oids[lid][idx])?
+                                } else {
+                                    indices_to_traverse.extend(parent_indices)
+                                }
                             }
+                            Some(Capsule::Normal(_)) => {
+                                unreachable!("LUT must be completely compacted in this branch")
+                            }
+                            None => unreachable!("Every item we see must be in the LUT"),
                         }
-                        Some(Capsule::Normal(_)) => {
-                            unreachable!("LUT must be completely compacted in this branch")
-                        }
-                        None => unreachable!("Every item we see must be in the LUT"),
                     }
                 }
-                writeln!(out)?
-            }
-            Some(Capsule::Normal(parent_oids)) => {
-                let mut oids_to_traverse = parent_oids.clone();
-                while let Some(oid) = oids_to_traverse.pop() {
-                    match lut.get(&oid) {
-                        Some(Capsule::Normal(parent_oids)) => {
-                            if parent_oids.is_empty() {
-                                write!(out, "{} ", oid)?
-                            } else {
-                                oids_to_traverse.extend(parent_oids)
+                Some(Capsule::Normal(parent_oids)) => {
+                    let mut oids_to_traverse = parent_oids.clone();
+                    while let Some(oid) = oids_to_traverse.pop() {
+                        match lut.get(&oid) {
+                            Some(Capsule::Normal(parent_oids)) => {
+                                if parent_oids.is_empty() {
+                                    write!(out, "{} ", oid)?
+                                } else {
+                                    oids_to_traverse.extend(parent_oids)
+                                }
                             }
+                            Some(Capsule::Compact(_)) => {
+                                unreachable!("LUT must be completely uncompacted in this branch")
+                            }
+                            None => unreachable!("Every item we see must be in the LUT"),
                         }
-                        Some(Capsule::Compact(_)) => {
-                            unreachable!("LUT must be completely uncompacted in this branch")
-                        }
-                        None => unreachable!("Every item we see must be in the LUT"),
                     }
                 }
-                writeln!(out)?
             }
         }
+        writeln!(out)?;
         out.flush()?;
     }
     Ok(())
 }
 
 fn run(opts: Options) -> Result<(), Error> {
-    let lut = build_lut(opts)?;
-    //    deplete_requests_from_stdin(&lut)
-    Ok(())
+    let luts = build_lut(opts)?;
+    deplete_requests_from_stdin(&luts)
 }
 
 fn main() {

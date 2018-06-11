@@ -12,6 +12,7 @@ use git2::{Oid, Repository};
 use std::mem;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
+const COMPACTION_PROGRESS_RATE: usize = 10000;
 
 enum Capsule {
     Normal(Vec<Oid>),
@@ -102,9 +103,9 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
         }
     }
 
+    compact_memory(&mut lut, &progress);
+
     progress.finish_and_clear();
-    eprintln!("Compacting memory...");
-    compact_memory(&mut lut);
     eprintln!(
         "READY: Build reverse-tree from {} commits with table of {} entries and {} parent-edges",
         num_commits,
@@ -114,9 +115,9 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
     Ok(lut)
 }
 
-fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>) -> () {
+fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>, progress: &indicatif::ProgressBar) -> () {
     let all_oids: Vec<_> = lut.keys().cloned().collect();
-    for capsule in lut.values_mut() {
+    for (cid, capsule) in lut.values_mut().enumerate() {
         let mut compacted = Vec::new();
         if let Capsule::Normal(ref mut parent_oids) = capsule {
             compacted = Vec::with_capacity(parent_oids.len());
@@ -128,6 +129,10 @@ fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>) -> () {
             }
         }
         mem::replace(capsule, Capsule::Compact(compacted));
+        if cid % COMPACTION_PROGRESS_RATE == 0 {
+            progress.set_message(&format!("Compacted {} of {} edges...", cid, all_oids.len(),));
+            progress.tick();
+        }
     }
 }
 

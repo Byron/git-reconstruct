@@ -99,8 +99,10 @@ fn build_lut(
 ) -> Result<BTreeMap<Oid, Capsule>, Error> {
     let mut walk = repo.revwalk()?;
     let mut total_refs = 0;
+
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
     setup_walk(repo, &mut walk, head_only)?;
+
     let mut num_commits = 0;
     let progress = ProgressBar::new_spinner();
     progress.set_draw_target(indicatif::ProgressDrawTarget::stderr());
@@ -147,13 +149,18 @@ fn setup_walk(repo: &Repository, walk: &mut Revwalk, head_only: bool) -> Result<
     if head_only {
         walk.push_head()?;
     } else {
+        let mut refs_pushed = 0;
         for remote_head in repo.branches(Some(git2::BranchType::Remote))?
-            .filter_map(|b| {
-                b.map(|(b, _bt)| b)
-                    .ok()
-                    .and_then(|b| b.get().target())
-            }) {
+            .filter_map(|b| b.map(|(b, _bt)| b).ok().and_then(|b| b.get().target()))
+        {
             walk.push(remote_head)?;
+            refs_pushed += 1;
+        }
+        if refs_pushed == 0 {
+            eprintln!(
+                "Didn't find a single remote - pushing head instead to avoid empty traversal"
+            );
+            walk.push_head()?;
         }
     }
     Ok(())

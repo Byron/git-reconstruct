@@ -14,6 +14,7 @@ use std::mem;
 const COMMIT_PROGRESS_RATE: usize = 100;
 const COMPACTION_PROGRESS_RATE: usize = 10000;
 
+#[derive(Clone)]
 enum Capsule {
     Normal(Vec<Oid>),
     Compact(Vec<usize>),
@@ -141,23 +142,30 @@ fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Erro
     let read = BufReader::new(stdin.lock());
     let stdout = stdout();
     let mut out = BufWriter::new(stdout.lock());
+    let all_oids: Vec<_> = lut.keys().cloned().collect();
     eprintln!("Waiting for input...");
     for hexsha in read.lines().filter_map(Result::ok) {
         let oid = Oid::from_str(&hexsha)?;
         match lut.get(&oid) {
             None => writeln!(out)?,
-            Some(Capsule::Normal(parents)) => {
-                let mut oids_to_traverse = parents.clone();
-                while let Some(oid) = oids_to_traverse.pop() {
-                    match lut.get(&oid) {
-                        Some(Capsule::Normal(parents)) => oids_to_traverse.extend(parents),
-                        None => write!(out, "{} ", oid)?,
-                        _ => unimplemented!(),
+            Some(Capsule::Compact(parents_indices)) => {
+                let mut indices_to_traverse = parents_indices.clone();
+                while let Some(idx) = indices_to_traverse.pop() {
+                    match lut.get(&all_oids[idx]) {
+                        Some(Capsule::Compact(parent_indices)) => {
+                            if parent_indices.is_empty() {
+                                write!(out, "{} ", all_oids[idx])?
+                            } else {
+                                indices_to_traverse.extend(parent_indices)
+                            }
+                        }
+                        Some(Capsule::Normal(_)) => unreachable!("LUT must be compacted by now"),
+                        None => unreachable!("Every item we see must be in the LUT"),
                     }
                 }
                 writeln!(out)?
             }
-            _ => unimplemented!(),
+            Some(Capsule::Normal(_)) => unreachable!("LUT must be compacted by now"),
         }
         out.flush()?;
     }

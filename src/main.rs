@@ -6,10 +6,10 @@ extern crate indicatif;
 
 use failure::{Error, ResultExt};
 use failure_tools::ok_or_exit;
-use std::collections::{BTreeMap, btree_map::Entry};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
+use std::{mem, collections::{BTreeMap, btree_map::Entry},
+          io::{stdin, stdout, BufRead, BufReader, BufWriter, Write}};
 use git2::{Oid, Repository};
-use std::mem;
+use indicatif::ProgressBar;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
 const COMPACTION_PROGRESS_RATE: usize = 10000;
@@ -81,7 +81,7 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
     walk.push_head()?;
     let mut lut = BTreeMap::new();
     let mut num_commits = 0;
-    let progress = indicatif::ProgressBar::new_spinner();
+    let progress = ProgressBar::new_spinner();
     progress.set_draw_target(indicatif::ProgressDrawTarget::stderr());
     for commit_oid in walk.filter_map(Result::ok) {
         num_commits += 1;
@@ -116,7 +116,7 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
     Ok(lut)
 }
 
-fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>, progress: &indicatif::ProgressBar) -> () {
+fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>, progress: &ProgressBar) -> () {
     let all_oids: Vec<_> = lut.keys().cloned().collect();
     for (cid, capsule) in lut.values_mut().enumerate() {
         let mut compacted = Vec::new();

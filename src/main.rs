@@ -1,18 +1,34 @@
-#[macro_use]
 extern crate failure;
 extern crate failure_tools;
 extern crate git2;
 extern crate indicatif;
+#[macro_use]
+extern crate structopt;
 
 use failure::{Error, ResultExt};
 use failure_tools::ok_or_exit;
 use std::{mem, collections::{BTreeMap, btree_map::Entry},
-          io::{stdin, stdout, BufRead, BufReader, BufWriter, Write}};
+          io::{stdin, stdout, BufRead, BufReader, BufWriter, Write}, path::PathBuf};
 use git2::{Oid, Repository};
 use indicatif::ProgressBar;
+use structopt::StructOpt;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
 const COMPACTION_PROGRESS_RATE: usize = 10000;
+
+/// A basic example
+#[derive(StructOpt, Debug)]
+#[structopt(name = "git-commits-by-blob")]
+struct Options {
+    /// If set, you will trade in about 35% increase in memory for about 30% less time till ready
+    /// for queries
+    #[structopt(long = "no-compact")]
+    no_compact: bool,
+
+    /// the repository to index for queries
+    #[structopt(name = "REPOSITORY", parse(from_os_str))]
+    repository: PathBuf,
+}
 
 #[derive(Clone)]
 enum Capsule {
@@ -74,7 +90,7 @@ fn recurse_tree(
     refs
 }
 
-fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
+fn build_lut(repo: &Repository, compact: bool) -> Result<BTreeMap<Oid, Capsule>, Error> {
     let mut walk = repo.revwalk()?;
     let mut total_refs = 0;
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
@@ -105,7 +121,11 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
             lut
         });
 
-    compact_memory(&mut lut, &progress);
+    if compact {
+        compact_memory(&mut lut, &progress);
+    } else {
+        eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")
+    }
 
     progress.finish_and_clear();
     eprintln!(
@@ -149,8 +169,8 @@ fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Erro
         let oid = Oid::from_str(&hexsha)?;
         match lut.get(&oid) {
             None => writeln!(out)?,
-            Some(Capsule::Compact(parents_indices)) => {
-                let mut indices_to_traverse = parents_indices.clone();
+            Some(Capsule::Compact(parent_indices)) => {
+                let mut indices_to_traverse = parent_indices.clone();
                 while let Some(idx) = indices_to_traverse.pop() {
                     match lut.get(&all_oids[idx]) {
                         Some(Capsule::Compact(parent_indices)) => {
@@ -160,29 +180,45 @@ fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Capsule>) -> Result<(), Erro
                                 indices_to_traverse.extend(parent_indices)
                             }
                         }
-                        Some(Capsule::Normal(_)) => unreachable!("LUT must be compacted by now"),
+                        Some(Capsule::Normal(_)) => {
+                            unreachable!("LUT must be completely compacted in this branch")
+                        }
                         None => unreachable!("Every item we see must be in the LUT"),
                     }
                 }
                 writeln!(out)?
             }
-            Some(Capsule::Normal(_)) => unreachable!("LUT must be compacted by now"),
+            Some(Capsule::Normal(parent_oids)) => {
+                let mut oids_to_traverse = parent_oids.clone();
+                while let Some(oid) = oids_to_traverse.pop() {
+                    match lut.get(&oid) {
+                        Some(Capsule::Normal(parent_oids)) => {
+                            if parent_oids.is_empty() {
+                                write!(out, "{} ", oid)?
+                            } else {
+                                oids_to_traverse.extend(parent_oids)
+                            }
+                        }
+                        Some(Capsule::Compact(_)) => {
+                            unreachable!("LUT must be completely uncompacted in this branch")
+                        }
+                        None => unreachable!("Every item we see must be in the LUT"),
+                    }
+                }
+            }
         }
         out.flush()?;
     }
     Ok(())
 }
 
-fn run() -> Result<(), Error> {
-    let repo = git2::Repository::open(std::env::args()
-        .skip(1)
-        .next()
-        .ok_or_else(|| format_err!("USAGE: <me> <repository>"))?)?;
+fn run(opts: Options) -> Result<(), Error> {
+    let repo = git2::Repository::open(opts.repository)?;
 
-    let lut = build_lut(&repo)?;
+    let lut = build_lut(&repo, !opts.no_compact)?;
     depelete_requests_from_stdin(&lut)
 }
 
 fn main() {
-    ok_or_exit(run().with_context(|_| "Failed to count git objects"))
+    ok_or_exit(run(Options::from_args()).with_context(|_| "Failed to count git objects"))
 }

@@ -10,6 +10,8 @@ use std::collections::{BTreeMap, btree_map::Entry};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 use git2::{Oid, Repository};
 
+const COMMIT_PROGRESS_RATE: usize = 100;
+
 fn insert_parent_and_has_not_seen_child(
     parent_oid: Oid,
     child_oid: Oid,
@@ -78,13 +80,15 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Vec<Oid>>, Error> {
                 total_refs += recurse_tree(&repo, tree, &mut lut);
             }
         }
-        progress.set_message(&format!(
-            "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
-            num_commits,
-            lut.len(),
-            total_refs
-        ));
-        progress.tick();
+        if num_commits % COMMIT_PROGRESS_RATE == 0 {
+            progress.set_message(&format!(
+                "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
+                num_commits,
+                lut.len(),
+                total_refs
+            ));
+            progress.tick();
+        }
     }
     progress.finish_and_clear();
     eprintln!("Compacting memory...");
@@ -105,6 +109,7 @@ fn depelete_requests_from_stdin(lut: &BTreeMap<Oid, Vec<Oid>>) -> Result<(), Err
     let read = BufReader::new(stdin.lock());
     let stdout = stdout();
     let mut out = BufWriter::new(stdout.lock());
+    eprintln!("Waiting for input...");
     for hexsha in read.lines().filter_map(Result::ok) {
         let oid = Oid::from_str(&hexsha)?;
         match lut.get(&oid) {

@@ -109,6 +109,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "curl-sys"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -167,10 +172,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "git-commits-by-blob"
 version = "1.0.0"
 dependencies = [
+ "crossbeam 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure-tools 4.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "git2 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "indicatif 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num_cpus 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -288,6 +295,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "memchr"
 version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "num_cpus"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -635,6 +650,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum clicolors-control 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1f84dec9bc083ce2503908cd305af98bd363da6f54bf8d4bf0ac14ee749ad5d1"
 "checksum cmake 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)" = "95470235c31c726d72bf2e1f421adc1e65b9d561bf5529612cbe1a72da1467b3"
 "checksum console 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7649ca90478264b9686aac8d269fcb014f14c2bed7c79a7e51b9f6afd4d783eb"
+"checksum crossbeam 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "24ce9782d4d5c53674646a6a4c1863a21a8fc0cb649b3c94dfc16e45071dea19"
 "checksum curl-sys 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)" = "71c63a540a9ee4e15e56c3ed9b11a2f121239b9f6d7b7fe30f616e048148df9a"
 "checksum failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "934799b6c1de475a012a02dab0ace1ace43789ee4b99bcfbf1a2e3e8ced5de82"
 "checksum failure-tools 4.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e76ebc533fd8c1bf2f72b3d6a44f2dcf16dd403c698a1cf0658974893634e3a7"
@@ -654,6 +670,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum log 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6fddaa003a65722a7fb9e26b0ce95921fe4ba590542ced664d8ce2fa26f9f3ac"
 "checksum matches 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "100aabe6b8ff4e4a7e32c1c13523379802df0772b82466207ac25b013f193376"
 "checksum memchr 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "796fba70e76612589ed2ce7f45282f5af869e0fdd7cc6199fa1aa1f1d591ba9d"
+"checksum num_cpus 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c51a3322e4bca9d212ad9a158a02abc6934d005490c054a2778df73a70aa0a30"
 "checksum openssl-probe 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
 "checksum openssl-sys 0.9.32 (registry+https://github.com/rust-lang/crates.io-index)" = "55ab11bb4f1874c116d57ff27d8bfe8252dafc567384334b7c58339ad57e0010"
 "checksum owning_ref 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "cdf84f41639e037b484f93433aa3897863b561ed65c6e59c7073d7c561710f37"

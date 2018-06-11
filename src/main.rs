@@ -4,6 +4,8 @@ extern crate git2;
 extern crate indicatif;
 #[macro_use]
 extern crate structopt;
+extern crate crossbeam;
+extern crate num_cpus;
 
 use failure::{Error, ResultExt};
 use failure_tools::ok_or_exit;
@@ -103,45 +105,63 @@ fn build_lut(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
         walk.filter_map(Result::ok).collect()
     };
 
-    let mut num_commits = 0;
-    let progress = ProgressBar::new_spinner();
-    progress.set_draw_target(indicatif::ProgressDrawTarget::stderr());
-    let mut luts: Vec<BTreeMap<Oid, Capsule>> = Vec::new();
-    let num_threads = 4;
-    for chunk_of_commits in commits.chunks(commits.len() / num_threads) {
-        let mut lut = BTreeMap::new();
-        for &commit_oid in chunk_of_commits {
-            num_commits += 1;
-            if let Ok(object) = repo.find_object(commit_oid, Some(ObjectType::Commit)) {
-                let commit = object.into_commit().expect("to have commit");
-                let tree = commit.tree().expect("commit to have tree");
-                lut.insert(commit_oid, Capsule::Normal(Vec::new()));
-                if insert_parent_and_has_not_seen_child(commit_oid, tree.id(), &mut lut) {
-                    total_refs += recurse_tree(&repo, tree, &mut lut);
-                }
-            }
-            if num_commits % COMMIT_PROGRESS_RATE == 0 {
-                progress.set_message(&format!(
-                    "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
-                    num_commits,
-                    lut.len(),
-                    total_refs
-                ));
-                progress.tick();
-            }
-        }
-        if !opts.no_compact {
-            compact_memory(&mut lut, &progress);
-        } else {
-            eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")
-        }
-        luts.push(lut)
-    }
+    let multiprogress = indicatif::MultiProgress::new();
 
-    progress.finish_and_clear();
+    let mut luts: Vec<BTreeMap<Oid, Capsule>> = Vec::new();
+    let num_threads = num_cpus::get_physical();
+    let mut total_refs = 0;
+
+    crossbeam::scope(|scope| {
+        let mut guards = Vec::with_capacity(num_threads);
+        for chunk_of_commits in commits.chunks(commits.len() / num_threads) {
+            let progress = multiprogress.add(ProgressBar::new_spinner());
+            let repo = Repository::open(&opts.repository).unwrap();
+            let no_compact = opts.no_compact;
+            let mut lut = BTreeMap::new();
+
+            let guard = scope.spawn(move || {
+                let (mut num_commits, mut total_refs) = (0, 0);
+                for &commit_oid in chunk_of_commits {
+                    num_commits += 1;
+                    if let Ok(object) = repo.find_object(commit_oid, Some(ObjectType::Commit)) {
+                        let commit = object.into_commit().expect("to have commit");
+                        let tree = commit.tree().expect("commit to have tree");
+                        lut.insert(commit_oid, Capsule::Normal(Vec::new()));
+                        if insert_parent_and_has_not_seen_child(commit_oid, tree.id(), &mut lut) {
+                            total_refs += recurse_tree(&repo, tree, &mut lut);
+                        }
+                    }
+                    if num_commits % COMMIT_PROGRESS_RATE == 0 {
+                        progress.set_message(&format!(
+                                        "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
+                                        num_commits,
+                                        lut.len(),
+                                        total_refs
+                                    ));
+                        progress.tick();
+                    }
+                }
+                if !no_compact {
+                    compact_memory(&mut lut, &progress);
+                } else {
+                    eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")
+                }
+                progress.finish_and_clear();
+                (lut, total_refs)
+            });
+            guards.push(guard);
+        }
+        multiprogress.join_and_clear().unwrap();
+        for guard in guards {
+            let (lut, edges) = guard.join();
+            luts.push(lut);
+            total_refs += edges;
+        }
+    });
+
     eprintln!(
         "READY: Build reverse-tree from {} commits with table of {} entries and {} parent-edges",
-        num_commits,
+        commits.len(),
         luts.iter().map(|l| l.len()).sum::<usize>(),
         total_refs
     );

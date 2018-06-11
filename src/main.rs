@@ -79,30 +79,31 @@ fn build_lut(repo: &Repository) -> Result<BTreeMap<Oid, Capsule>, Error> {
     let mut total_refs = 0;
     walk.set_sorting(git2::Sort::TOPOLOGICAL);
     walk.push_head()?;
-    let mut lut = BTreeMap::new();
     let mut num_commits = 0;
     let progress = ProgressBar::new_spinner();
     progress.set_draw_target(indicatif::ProgressDrawTarget::stderr());
-    for commit_oid in walk.filter_map(Result::ok) {
-        num_commits += 1;
-        if let Ok(object) = repo.find_object(commit_oid, Some(git2::ObjectType::Commit)) {
-            let commit = object.into_commit().expect("to have commit");
-            let tree = commit.tree().expect("commit to have tree");
-            lut.insert(commit_oid, Capsule::Normal(Vec::new()));
-            if insert_parent_and_has_not_seen_child(commit_oid, tree.id(), &mut lut) {
-                total_refs += recurse_tree(&repo, tree, &mut lut);
+    let mut lut = walk.filter_map(Result::ok)
+        .fold(BTreeMap::new(), |mut lut, commit_oid| {
+            num_commits += 1;
+            if let Ok(object) = repo.find_object(commit_oid, Some(git2::ObjectType::Commit)) {
+                let commit = object.into_commit().expect("to have commit");
+                let tree = commit.tree().expect("commit to have tree");
+                lut.insert(commit_oid, Capsule::Normal(Vec::new()));
+                if insert_parent_and_has_not_seen_child(commit_oid, tree.id(), &mut lut) {
+                    total_refs += recurse_tree(&repo, tree, &mut lut);
+                }
             }
-        }
-        if num_commits % COMMIT_PROGRESS_RATE == 0 {
-            progress.set_message(&format!(
-                "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
-                num_commits,
-                lut.len(),
-                total_refs
-            ));
-            progress.tick();
-        }
-    }
+            if num_commits % COMMIT_PROGRESS_RATE == 0 {
+                progress.set_message(&format!(
+                    "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
+                    num_commits,
+                    lut.len(),
+                    total_refs
+                ));
+                progress.tick();
+            }
+            lut
+        });
 
     compact_memory(&mut lut, &progress);
 

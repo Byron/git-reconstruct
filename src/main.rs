@@ -5,6 +5,7 @@ extern crate indicatif;
 #[macro_use]
 extern crate structopt;
 extern crate crossbeam;
+extern crate hex;
 extern crate num_cpus;
 
 use failure::Error;
@@ -55,6 +56,7 @@ pub struct Options {
 }
 
 fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
+    use hex::ToHex;
     let all_oids = lut::commit_oids_table(luts);
     let mut commits = Vec::new();
 
@@ -63,6 +65,7 @@ fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(),
 
     let read = BufReader::new(stdin.lock());
     let mut out = BufWriter::new(stdout.lock());
+    let mut obuf = String::new();
 
     eprintln!("Waiting for input...");
     for hexsha in read.lines().filter_map(Result::ok) {
@@ -71,10 +74,17 @@ fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(),
         commits.clear();
         lut::commits_by_blob(&oid, luts, &all_oids, &mut commits);
 
-        for commit_oid in &commits {
-            write!(out, "{} ", commit_oid)?
+        obuf.clear();
+        let len = commits.len();
+        for (cid, commit_oid) in commits.iter().enumerate() {
+            commit_oid.as_bytes().write_hex(&mut obuf)?;
+            if cid + 1 < len {
+                obuf.push(' ');
+            }
         }
-        writeln!(out)?;
+        obuf.push('\n');
+
+        write!(out, "{}", obuf)?;
         out.flush()?;
     }
     Ok(())
@@ -86,9 +96,14 @@ mod find {
     use std::collections::BTreeMap;
     use Capsule;
     use git2::Oid;
+    use lut;
 
-    pub fn commit(tree: &Path, luts: Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
-        unimplemented!()
+    pub fn commit(_tree: &Path, luts: Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
+        let _all_oids = lut::commit_oids_table(&luts);
+        //        let mut commits = Vec::new();
+
+        //        let mut blobs = Vec
+        unimplemented!();
     }
 }
 

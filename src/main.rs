@@ -80,9 +80,25 @@ fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(),
     Ok(())
 }
 
+mod find {
+    use failure::Error;
+    use std::path::Path;
+    use std::collections::BTreeMap;
+    use Capsule;
+    use git2::Oid;
+
+    pub fn commit(tree: &Path, luts: Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
+        unimplemented!()
+    }
+}
+
 fn run(opts: Options) -> Result<(), Error> {
+    let tree = opts.tree.clone();
     let luts = lut::build(opts)?;
-    deplete_requests_from_stdin(&luts)
+    match tree {
+        None => deplete_requests_from_stdin(&luts),
+        Some(tree) => find::commit(&tree, luts),
+    }
 }
 
 fn main() {

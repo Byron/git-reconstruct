@@ -11,54 +11,59 @@ use crossbeam;
 const COMMIT_PROGRESS_RATE: usize = 100;
 const COMPACTION_PROGRESS_RATE: usize = 10000;
 
-fn insert_parent_and_has_not_seen_child(
-    parent_oid: Oid,
-    child_oid: Oid,
-    lut: &mut BTreeMap<Oid, Capsule>,
-) -> bool {
-    match lut.entry(child_oid) {
-        Entry::Occupied(mut entry) => {
-            if let Capsule::Normal(ref mut parents) = entry.get_mut() {
-                parents.push(parent_oid);
-            }
-            false
-        }
-        Entry::Vacant(entry) => {
-            entry.insert(Capsule::Normal(vec![parent_oid]));
-            true
-        }
-    }
+pub fn commit_oids_table(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Vec<Vec<Oid>> {
+    luts.iter()
+        .map(|lut| lut.keys().cloned().collect())
+        .collect()
 }
 
-fn recurse_tree(repo: &Repository, tree: Tree, lut: &mut BTreeMap<Oid, Capsule>) -> usize {
-    use ObjectType::*;
-    let mut refs = 0;
-    for item in tree.iter() {
-        match item.kind() {
-            Some(Tree) => {
-                if insert_parent_and_has_not_seen_child(tree.id(), item.id(), lut) {
-                    refs += recurse_tree(
-                        repo,
-                        item.to_object(repo)
-                            .expect("valid object")
-                            .into_tree()
-                            .expect("tree"),
-                        lut,
-                    )
+pub fn commits_by_blob(
+    blob: &Oid,
+    luts: &Vec<BTreeMap<Oid, Capsule>>,
+    all_oids: &Vec<Vec<Oid>>,
+    out: &mut Vec<Oid>,
+) {
+    for (lid, lut) in luts.iter().enumerate() {
+        match lut.get(&blob) {
+            None => {}
+            Some(Capsule::Compact(parent_indices)) => {
+                let mut indices_to_traverse = parent_indices.clone();
+                while let Some(idx) = indices_to_traverse.pop() {
+                    match lut.get(&all_oids[lid][idx]) {
+                        Some(Capsule::Compact(parent_indices)) => {
+                            if parent_indices.is_empty() {
+                                out.push(all_oids[lid][idx]);
+                            } else {
+                                indices_to_traverse.extend(parent_indices)
+                            }
+                        }
+                        Some(Capsule::Normal(_)) => {
+                            unreachable!("LUT must be completely compacted in this branch")
+                        }
+                        None => unreachable!("Every item we see must be in the LUT"),
+                    }
                 }
             }
-            Some(Blob) => {
-                refs += 1;
-                if let Capsule::Normal(ref mut parents) = lut.entry(item.id())
-                    .or_insert_with(|| Capsule::Normal(Vec::new()))
-                {
-                    parents.push(tree.id());
+            Some(Capsule::Normal(parent_oids)) => {
+                let mut oids_to_traverse = parent_oids.clone();
+                while let Some(oid) = oids_to_traverse.pop() {
+                    match lut.get(&oid) {
+                        Some(Capsule::Normal(parent_oids)) => {
+                            if parent_oids.is_empty() {
+                                out.push(oid)
+                            } else {
+                                oids_to_traverse.extend(parent_oids)
+                            }
+                        }
+                        Some(Capsule::Compact(_)) => {
+                            unreachable!("LUT must be completely uncompacted in this branch")
+                        }
+                        None => unreachable!("Every item we see must be in the LUT"),
+                    }
                 }
             }
-            _ => continue,
         }
     }
-    refs
 }
 
 pub fn build(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
@@ -132,6 +137,56 @@ pub fn build(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
         total_refs
     );
     Ok(luts)
+}
+
+fn insert_parent_and_has_not_seen_child(
+    parent_oid: Oid,
+    child_oid: Oid,
+    lut: &mut BTreeMap<Oid, Capsule>,
+) -> bool {
+    match lut.entry(child_oid) {
+        Entry::Occupied(mut entry) => {
+            if let Capsule::Normal(ref mut parents) = entry.get_mut() {
+                parents.push(parent_oid);
+            }
+            false
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(Capsule::Normal(vec![parent_oid]));
+            true
+        }
+    }
+}
+
+fn recurse_tree(repo: &Repository, tree: Tree, lut: &mut BTreeMap<Oid, Capsule>) -> usize {
+    use ObjectType::*;
+    let mut refs = 0;
+    for item in tree.iter() {
+        match item.kind() {
+            Some(Tree) => {
+                if insert_parent_and_has_not_seen_child(tree.id(), item.id(), lut) {
+                    refs += recurse_tree(
+                        repo,
+                        item.to_object(repo)
+                            .expect("valid object")
+                            .into_tree()
+                            .expect("tree"),
+                        lut,
+                    )
+                }
+            }
+            Some(Blob) => {
+                refs += 1;
+                if let Capsule::Normal(ref mut parents) = lut.entry(item.id())
+                    .or_insert_with(|| Capsule::Normal(Vec::new()))
+                {
+                    parents.push(tree.id());
+                }
+            }
+            _ => continue,
+        }
+    }
+    refs
 }
 
 fn setup_walk(repo: &Repository, walk: &mut Revwalk, head_only: bool) -> Result<(), Error> {

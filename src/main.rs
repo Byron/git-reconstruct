@@ -94,15 +94,17 @@ mod find {
             }
         }
 
-        // TODO: allow compacting memory so lookup only contains the tree reachable
+        // TODO PERFORMANCE: allow compacting memory so lookup only contains the tree reachable
         // by blobs
         let mut commit_to_blobs = BTreeMap::new();
         {
             let all_oids = lut::commit_oids_table(&luts);
             let mut commits = Vec::new();
+            let mut total_commits = 0;
             for (bid, blob) in blobs.iter().enumerate() {
                 commits.clear();
                 lut::commits_by_blob(&blob, &luts, &all_oids, &mut commits);
+                total_commits += commits.len();
 
                 for commit in &commits {
                     commit_to_blobs
@@ -112,7 +114,7 @@ mod find {
                 }
 
                 if bid % BITMAP_PROGRESS_RATE == 0 {
-                    progress.set_message(&format!("{}/{}: Ticking blob bits...", bid, blobs.len()));
+                    progress.set_message(&format!("{}/{}: Ticking blob bits, saw {} commits so far...", bid, blobs.len(), total_commits));
                     progress.tick();
                 }
             }

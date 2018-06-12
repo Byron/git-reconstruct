@@ -5,6 +5,7 @@ extern crate indicatif;
 #[macro_use]
 extern crate structopt;
 extern crate crossbeam;
+extern crate fixedbitset;
 extern crate num_cpus;
 extern crate walkdir;
 
@@ -15,6 +16,11 @@ use structopt::StructOpt;
 
 mod lut;
 mod cli;
+
+fn main() {
+    let opts = Options::from_args();
+    ok_or_exit(cli::run(opts));
+}
 
 #[derive(Clone)]
 pub enum Capsule {
@@ -55,17 +61,19 @@ pub struct Options {
 }
 
 mod find {
+    use fixedbitset::FixedBitSet;
     use failure::Error;
-    use std::path::Path;
+    use std::{collections::BTreeMap, path::Path};
     use git2::Oid;
-    use lut::MultiReverseCommitGraph;
+    use lut::{self, MultiReverseCommitGraph};
     use walkdir::WalkDir;
     use git2::ObjectType;
     use indicatif::ProgressBar;
 
     const HASHING_PROGRESS_RATE: usize = 25;
+    const BITMAP_PROGRESS_RATE: usize = 25;
 
-    pub fn commit(tree: &Path, _luts: MultiReverseCommitGraph) -> Result<(), Error> {
+    pub fn commit(tree: &Path, luts: MultiReverseCommitGraph) -> Result<(), Error> {
         let progress = ProgressBar::new_spinner();
         let mut blobs = Vec::new();
         for (eid, entry) in WalkDir::new(tree)
@@ -85,12 +93,32 @@ mod find {
                 progress.tick();
             }
         }
+
+        // TODO: allow compacting memory so lookup only contains the tree reachable
+        // by blobs
+        let mut commit_to_blobs = BTreeMap::new();
+        {
+            let all_oids = lut::commit_oids_table(&luts);
+            let mut commits = Vec::new();
+            for (bid, blob) in blobs.iter().enumerate() {
+                commits.clear();
+                lut::commits_by_blob(&blob, &luts, &all_oids, &mut commits);
+
+                for commit in &commits {
+                    commit_to_blobs
+                        .entry(commit.clone())
+                        .or_insert_with(|| FixedBitSet::with_capacity(blobs.len()))
+                        .put(bid);
+                }
+
+                if bid % BITMAP_PROGRESS_RATE == 0 {
+                    progress.set_message(&format!("{}/{}: Ticking blob bits...", bid, blobs.len()));
+                    progress.tick();
+                }
+            }
+            drop(luts);
+        }
         progress.finish_and_clear();
         unimplemented!();
     }
-}
-
-fn main() {
-    let opts = Options::from_args();
-    ok_or_exit(cli::run(opts));
 }

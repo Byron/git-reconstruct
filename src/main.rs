@@ -8,14 +8,13 @@ extern crate crossbeam;
 extern crate num_cpus;
 extern crate walkdir;
 
-use failure::Error;
 use failure_tools::ok_or_exit;
-use std::{io::{stdin, stdout, BufRead, BufReader, Write}, path::PathBuf};
+use std::path::PathBuf;
 use git2::{ObjectType, Oid};
 use structopt::StructOpt;
 
 mod lut;
-use lut::MultiReverseCommitGraph;
+mod cli;
 
 #[derive(Clone)]
 pub enum Capsule {
@@ -55,41 +54,6 @@ pub struct Options {
     tree: Option<PathBuf>,
 }
 
-fn deplete_requests_from_stdin(luts: &MultiReverseCommitGraph) -> Result<(), Error> {
-    let all_oids = lut::commit_oids_table(luts);
-    let mut commits = Vec::new();
-
-    let stdin = stdin();
-    let stdout = stdout();
-
-    let read = BufReader::new(stdin.lock());
-    let mut out = stdout.lock();
-    let mut obuf = String::new();
-
-    eprintln!("Waiting for input...");
-    for hexsha in read.lines().filter_map(Result::ok) {
-        let oid = Oid::from_str(&hexsha)?;
-
-        commits.clear();
-        lut::commits_by_blob(&oid, luts, &all_oids, &mut commits);
-
-        obuf.clear();
-        let len = commits.len();
-        for (cid, commit_oid) in commits.iter().enumerate() {
-            use std::fmt::Write;
-            write!(obuf, "{}", commit_oid)?;
-            if cid + 1 < len {
-                obuf.push(' ');
-            }
-        }
-        obuf.push('\n');
-
-        write!(out, "{}", obuf)?;
-        out.flush()?;
-    }
-    Ok(())
-}
-
 mod find {
     use failure::Error;
     use std::path::Path;
@@ -115,7 +79,7 @@ mod find {
             if entry.file_type().is_dir() {
                 continue;
             }
-            blobs.push(Oid::hash_file(ObjectType::Blob, entry.file_name())?);
+            blobs.push(Oid::hash_file(ObjectType::Blob, entry.path())?);
             if eid % HASHING_PROGRESS_RATE == 0 {
                 progress.set_message(&format!("Hashed {} files...", eid));
                 progress.tick();
@@ -126,16 +90,7 @@ mod find {
     }
 }
 
-fn run(opts: Options) -> Result<(), Error> {
-    let tree = opts.tree.clone();
-    let luts = lut::build(opts)?;
-    match tree {
-        None => deplete_requests_from_stdin(&luts),
-        Some(tree) => find::commit(&tree, luts),
-    }
-}
-
 fn main() {
     let opts = Options::from_args();
-    ok_or_exit(run(opts));
+    ok_or_exit(cli::run(opts));
 }

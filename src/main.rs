@@ -110,7 +110,7 @@ fn build_lut(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
 
     let multiprogress = indicatif::MultiProgress::new();
 
-    let mut luts: Vec<BTreeMap<Oid, Capsule>> = Vec::new();
+    let mut luts: Vec<_> = Vec::new();
     let num_threads = opts.threads.unwrap_or_else(num_cpus::get_physical);
     let mut total_refs = 0;
 
@@ -183,9 +183,7 @@ fn setup_walk(repo: &Repository, walk: &mut Revwalk, head_only: bool) -> Result<
             refs_pushed += 1;
         }
         if refs_pushed == 0 {
-            eprintln!(
-                "Didn't find a single remote - using head instead to avoid empty traversal"
-            );
+            eprintln!("Didn't find a single remote - using head instead to avoid empty traversal");
             walk.push_head()?;
         }
     }

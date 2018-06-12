@@ -5,13 +5,11 @@ extern crate indicatif;
 #[macro_use]
 extern crate structopt;
 extern crate crossbeam;
-extern crate hex;
 extern crate num_cpus;
 
 use failure::Error;
 use failure_tools::ok_or_exit;
-use std::{collections::BTreeMap, io::{stdin, stdout, BufRead, BufReader, Write},
-          path::PathBuf};
+use std::{collections::BTreeMap, io::{stdin, stdout, BufRead, BufReader, Write}, path::PathBuf};
 use git2::{ObjectType, Oid};
 use structopt::StructOpt;
 
@@ -56,7 +54,6 @@ pub struct Options {
 }
 
 fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
-    use hex::ToHex;
     let all_oids = lut::commit_oids_table(luts);
     let mut commits = Vec::new();
 
@@ -77,7 +74,8 @@ fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(),
         obuf.clear();
         let len = commits.len();
         for (cid, commit_oid) in commits.iter().enumerate() {
-            commit_oid.as_bytes().write_hex(&mut obuf)?;
+            use std::fmt::Write;
+            write!(obuf, "{}", commit_oid)?;
             if cid + 1 < len {
                 obuf.push(' ');
             }

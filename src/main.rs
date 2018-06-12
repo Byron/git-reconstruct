@@ -62,7 +62,7 @@ pub struct Options {
 
 mod find {
     use fixedbitset::FixedBitSet;
-    use failure::Error;
+    use failure::{Error, ResultExt};
     use std::{collections::BTreeMap, path::Path};
     use git2::Oid;
     use lut::{self, MultiReverseCommitGraph};
@@ -84,10 +84,11 @@ mod find {
             .enumerate()
         {
             let entry = entry?;
-            if entry.file_type().is_dir() {
+            if !entry.file_type().is_file() {
                 continue;
             }
-            blobs.push(Oid::hash_file(ObjectType::Blob, entry.path())?);
+            blobs.push(Oid::hash_file(ObjectType::Blob, entry.path())
+                .with_context(|_| format!("Could not hash file '{}'", entry.path().display()))?);
             if eid % HASHING_PROGRESS_RATE == 0 {
                 progress.set_message(&format!("Hashed {} files...", eid));
                 progress.tick();
@@ -114,7 +115,12 @@ mod find {
                 }
 
                 if bid % BITMAP_PROGRESS_RATE == 0 {
-                    progress.set_message(&format!("{}/{}: Ticking blob bits, saw {} commits so far...", bid, blobs.len(), total_commits));
+                    progress.set_message(&format!(
+                        "{}/{}: Ticking blob bits, saw {} commits so far...",
+                        bid,
+                        blobs.len(),
+                        total_commits
+                    ));
                     progress.tick();
                 }
             }

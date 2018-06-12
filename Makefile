@@ -1,16 +1,49 @@
+docker_image = docker_developer_environment
 
 help:
-	$(info Targets)
-	$(info test              | run the tests)
-	$(info continuous-test   | run the tests on changes)
+	$(info -Targets -----------------------------------------------------------------------------)
+	$(info -Development Targets -----------------------------------------------------------------)
+	$(info lint                         | run lints with clippy)
+	$(info legacy-test                  | run the old tests - need to put them into journey test)
+	$(info benchmark                    | just for fun, really)
+	$(info profile                      | only on linux - run callgrind and annotate it)
+	$(info journey-tests                | run all stateless journey test)
+	$(info continuous-journey-tests     | run all stateless journey test whenever something changes)
+	$(info continuous-legacy-test       | run the unit tests on changes)
+	$(info -- Use docker for all dependencies - run make interactively from there ----------------)
+	$(info interactive-developer-environment-in-docker | gives you everything you need to run all targets)
 
 always:
+
+interactive-developer-environment-in-docker:
+	docker build -t $(docker_image) - < etc/developer.Dockerfile
+	docker run -v $$PWD:/volume -w /volume -it $(docker_image)
 
 target/debug/git-commits-by-blob: always
 	cargo build
 
-test: target/debug/git-commits-by-blob
+target/release/git-commits-by-blob: always
+	cargo build --release
+
+lint:
+	cargo clippy
+
+profile: target/release/git-commits-by-blob
+	valgrind --callgrind-out-file=callgrind.profile --tool=callgrind  $< >/dev/null
+	callgrind_annotate --auto=yes callgrind.profile
+
+benchmark: target/release/git-commits-by-blob
+	hyperfine '$<'
+
+journey-tests: target/debug/git-commits-by-blob
+	./tests/stateless-journey.sh $<
+
+continuous-journey-tests:
+	watchexec $(MAKE) journey-tests
+
+legacy-test: target/debug/git-commits-by-blob
 	tests/test.sh $<
-	
-continuous-test:
-	watchexec $(MAKE) test
+
+continuous-legacy-test:
+	watchexec $(MAKE) legacy-test
+

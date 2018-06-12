@@ -10,7 +10,7 @@ extern crate num_cpus;
 
 use failure::Error;
 use failure_tools::ok_or_exit;
-use std::{collections::BTreeMap, io::{stdin, stdout, BufRead, BufReader, BufWriter, Write},
+use std::{collections::BTreeMap, io::{stdin, stdout, BufRead, BufReader, Write},
           path::PathBuf};
 use git2::{ObjectType, Oid};
 use structopt::StructOpt;
@@ -64,7 +64,7 @@ fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(),
     let stdout = stdout();
 
     let read = BufReader::new(stdin.lock());
-    let mut out = BufWriter::new(stdout.lock());
+    let mut out = stdout.lock();
     let mut obuf = String::new();
 
     eprintln!("Waiting for input...");

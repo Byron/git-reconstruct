@@ -25,7 +25,6 @@ fn deplete_requests_from_stdin(luts: &MultiReverseCommitGraph) -> Result<(), Err
     for (hid, hexsha) in read.lines().filter_map(Result::ok).enumerate() {
         let oid = Oid::from_str(&hexsha)?;
 
-        commits.clear();
         lut::commits_by_blob(&oid, luts, &all_oids, &mut commits);
         total_commits += commits.len();
 

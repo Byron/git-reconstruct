@@ -71,7 +71,6 @@ mod find {
     use indicatif::ProgressBar;
 
     const HASHING_PROGRESS_RATE: usize = 25;
-    const BITMAP_PROGRESS_RATE: usize = 25;
 
     pub fn commit(tree: &Path, luts: MultiReverseCommitGraph) -> Result<(), Error> {
         let progress = ProgressBar::new_spinner();
@@ -105,11 +104,11 @@ mod find {
         // Given the numbers, the spike might not be that huge!
         let mut commit_to_blobs = BTreeMap::new();
         {
-            let all_oids = lut::commit_oids_table(&luts);
+            let (luts, all_oids) = lut::compact_by_blobs(&blobs, luts);
+            //            let all_oids = lut::commit_oids_table(&luts);
             let mut commits = Vec::new();
             let mut total_commits = 0;
             for (bid, blob) in blobs.iter().enumerate() {
-                commits.clear();
                 lut::commits_by_blob(&blob, &luts, &all_oids, &mut commits);
                 total_commits += commits.len();
 

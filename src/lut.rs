@@ -19,49 +19,80 @@ pub fn commit_oids_table(luts: &MultiReverseCommitGraph) -> Vec<Vec<Oid>> {
         .collect()
 }
 
+pub fn compact_by_blobs(
+    blobs: &Vec<Oid>,
+    luts: MultiReverseCommitGraph,
+) -> (MultiReverseCommitGraph, Vec<Vec<Oid>>) {
+    // TODO Performance: can easily be threaded
+    let progress = ProgressBar::new_spinner();
+    let mut nluts = MultiReverseCommitGraph::new();
+    for lut in &luts {
+        let mut nlut = BTreeMap::<Oid, Capsule>::new();
+        let all_oids: Vec<_> = lut.keys().cloned().collect();
+
+        for blob in blobs {
+            //            lookup_oid()
+        }
+    }
+    progress.finish_and_clear();
+
+    let all_oids = commit_oids_table(&nluts);
+    (nluts, all_oids)
+}
+
 pub fn commits_by_blob(
     blob: &Oid,
     luts: &MultiReverseCommitGraph,
     all_oids: &Vec<Vec<Oid>>,
     out: &mut Vec<Oid>,
 ) {
-    for (lid, lut) in luts.iter().enumerate() {
-        match lut.get(&blob) {
-            None => {}
-            Some(Capsule::Compact(parent_indices)) => {
-                let mut indices_to_traverse = parent_indices.clone();
-                while let Some(idx) = indices_to_traverse.pop() {
-                    match lut.get(&all_oids[lid][idx]) {
-                        Some(Capsule::Compact(parent_indices)) => {
-                            if parent_indices.is_empty() {
-                                out.push(all_oids[lid][idx]);
-                            } else {
-                                indices_to_traverse.extend(parent_indices)
-                            }
+    for (lut, all_oids) in luts.iter().zip(all_oids) {
+        lookup_oid(&blob, lut, all_oids, out)
+    }
+}
+
+fn lookup_oid(
+    blob: &Oid,
+    lut: &BTreeMap<Oid, Capsule>,
+    all_oids: &Vec<Oid>,
+    out: &mut Vec<Oid>,
+) -> () {
+    match lut.get(blob) {
+        None => {}
+        Some(Capsule::Compact(parent_indices)) => {
+            out.clear();
+            let mut indices_to_traverse = parent_indices.clone();
+            while let Some(idx) = indices_to_traverse.pop() {
+                match lut.get(&all_oids[idx]) {
+                    Some(Capsule::Compact(parent_indices)) => {
+                        if parent_indices.is_empty() {
+                            out.push(all_oids[idx]);
+                        } else {
+                            indices_to_traverse.extend(parent_indices)
                         }
-                        Some(Capsule::Normal(_)) => {
-                            unreachable!("LUT must be completely compacted in this branch")
-                        }
-                        None => unreachable!("Every item we see must be in the LUT"),
                     }
+                    Some(Capsule::Normal(_)) => {
+                        unreachable!("LUT must be completely compacted in this branch")
+                    }
+                    None => unreachable!("Every item we see must be in the LUT"),
                 }
             }
-            Some(Capsule::Normal(parent_oids)) => {
-                let mut oids_to_traverse = parent_oids.clone();
-                while let Some(oid) = oids_to_traverse.pop() {
-                    match lut.get(&oid) {
-                        Some(Capsule::Normal(parent_oids)) => {
-                            if parent_oids.is_empty() {
-                                out.push(oid)
-                            } else {
-                                oids_to_traverse.extend(parent_oids)
-                            }
+        }
+        Some(Capsule::Normal(parent_oids)) => {
+            let mut oids_to_traverse = parent_oids.clone();
+            while let Some(oid) = oids_to_traverse.pop() {
+                match lut.get(&oid) {
+                    Some(Capsule::Normal(parent_oids)) => {
+                        if parent_oids.is_empty() {
+                            out.push(oid)
+                        } else {
+                            oids_to_traverse.extend(parent_oids)
                         }
-                        Some(Capsule::Compact(_)) => {
-                            unreachable!("LUT must be completely uncompacted in this branch")
-                        }
-                        None => unreachable!("Every item we see must be in the LUT"),
                     }
+                    Some(Capsule::Compact(_)) => {
+                        unreachable!("LUT must be completely uncompacted in this branch")
+                    }
+                    None => unreachable!("Every item we see must be in the LUT"),
                 }
             }
         }
@@ -91,7 +122,7 @@ pub fn build(opts: Options) -> Result<MultiReverseCommitGraph, Error> {
             let progress = multiprogress.add(ProgressBar::new_spinner());
             let repo =
                 Repository::open(&opts.repository).expect("successful repository initialization");
-            let no_compact = opts.no_compact;
+            let compact = !opts.no_compact;
             let mut lut = BTreeMap::new();
 
             let guard = scope.spawn(move || {
@@ -116,7 +147,7 @@ pub fn build(opts: Options) -> Result<MultiReverseCommitGraph, Error> {
                         progress.tick();
                     }
                 }
-                if !no_compact {
+                if compact {
                     compact_memory(&mut lut, &progress);
                 } else {
                     eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")

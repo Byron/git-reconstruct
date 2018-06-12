@@ -84,7 +84,8 @@ pub fn build(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
 
     crossbeam::scope(|scope| {
         let mut guards = Vec::with_capacity(num_threads);
-        for chunk_of_commits in commits.chunks(commits.len() / num_threads) {
+        for (chunk_idx, chunk_of_commits) in commits.chunks(commits.len() / num_threads).enumerate()
+        {
             let progress = multiprogress.add(ProgressBar::new_spinner());
             let repo = Repository::open(&opts.repository).unwrap();
             let no_compact = opts.no_compact;
@@ -118,17 +119,20 @@ pub fn build(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
                     eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")
                 }
                 progress.finish_and_clear();
-                (lut, total_refs)
+                (lut, total_refs, chunk_idx)
             });
             guards.push(guard);
         }
         multiprogress.join_and_clear().unwrap();
         for guard in guards {
-            let (lut, edges) = guard.join();
-            luts.push(lut);
+            let (lut, edges, chunk_idx) = guard.join();
+            luts.push((chunk_idx, lut));
             total_refs += edges;
         }
     });
+
+    luts.sort_by_key(|(chunk_idx, _)| *chunk_idx);
+    let luts: Vec<_> = luts.drain(..).map(|(_, lut)| lut).collect();
 
     eprintln!(
         "READY: Build reverse-tree from {} commits with table of {} entries and {} parent-edges",

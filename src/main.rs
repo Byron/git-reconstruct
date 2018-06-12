@@ -97,7 +97,12 @@ mod find {
         }
 
         // TODO PERFORMANCE: allow compacting memory so lookup only contains the tree reachable
-        // by blobs
+        // by blobs. It looks like it's too intense to prune the existing map. Instead one should
+        // rebuild a new lut, but that would generate a memory spike. Maybe less of a problem
+        // if compaction ran before (so we have enough). It's also unclear if that will make
+        // anything faster, and if not, those who have no memory anyway can't afford the spike
+        // If there is a good way, it could be valuable, as 55k is way less than 1832k!
+        // Given the numbers, the spike might not be that huge!
         let mut commit_to_blobs = BTreeMap::new();
         {
             let all_oids = lut::commit_oids_table(&luts);
@@ -115,15 +120,13 @@ mod find {
                         .put(bid);
                 }
 
-                if bid % BITMAP_PROGRESS_RATE == 0 {
-                    progress.set_message(&format!(
-                        "{}/{}: Ticking blob bits, saw {} commits so far...",
-                        bid,
-                        blobs.len(),
-                        total_commits
-                    ));
-                    progress.tick();
-                }
+                progress.set_message(&format!(
+                    "{}/{}: Ticking blob bits, saw {} commits so far...",
+                    bid,
+                    blobs.len(),
+                    total_commits
+                ));
+                progress.tick();
             }
             drop(luts);
         }

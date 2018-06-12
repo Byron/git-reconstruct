@@ -28,6 +28,12 @@ pub enum Capsule {
     Compact(Vec<usize>),
 }
 
+#[derive(Default)]
+pub struct Stack {
+    indices: Vec<usize>,
+    oids: Vec<Oid>,
+}
+
 /// A basic example
 #[derive(StructOpt, Debug)]
 #[structopt(name = "git-commits-by-blob")]
@@ -69,6 +75,7 @@ mod find {
     use walkdir::WalkDir;
     use git2::ObjectType;
     use indicatif::ProgressBar;
+    use Stack;
 
     const HASHING_PROGRESS_RATE: usize = 25;
 
@@ -108,8 +115,9 @@ mod find {
             //            let all_oids = lut::commit_oids_table(&luts);
             let mut commits = Vec::new();
             let mut total_commits = 0;
+            let mut stack = Stack::default();
             for (bid, blob) in blobs.iter().enumerate() {
-                lut::commits_by_blob(&blob, &luts, &all_oids, &mut commits);
+                lut::commits_by_blob(&blob, &luts, &all_oids, &mut stack, &mut commits);
                 total_commits += commits.len();
 
                 for commit in &commits {

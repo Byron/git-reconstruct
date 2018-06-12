@@ -2,7 +2,7 @@ use failure::Error;
 use std::{mem, collections::{BTreeMap, btree_map::Entry}};
 use git2::{ObjectType, Oid, Repository, Revwalk, Tree};
 use indicatif::{MultiProgress, ProgressBar};
-use Capsule;
+use {Capsule, Stack};
 use Options;
 use num_cpus;
 use git2;
@@ -44,10 +44,11 @@ pub fn commits_by_blob(
     blob: &Oid,
     luts: &MultiReverseCommitGraph,
     all_oids: &Vec<Vec<Oid>>,
+    stack: &mut Stack,
     out: &mut Vec<Oid>,
 ) {
     for (lut, all_oids) in luts.iter().zip(all_oids) {
-        lookup_oid(&blob, lut, all_oids, out)
+        lookup_oid(&blob, lut, all_oids, stack, out)
     }
 }
 
@@ -55,13 +56,16 @@ fn lookup_oid(
     blob: &Oid,
     lut: &BTreeMap<Oid, Capsule>,
     all_oids: &Vec<Oid>,
+    stack: &mut Stack,
     out: &mut Vec<Oid>,
 ) -> () {
     match lut.get(blob) {
         None => {}
         Some(Capsule::Compact(parent_indices)) => {
             out.clear();
-            let mut indices_to_traverse = parent_indices.clone();
+            let indices_to_traverse = &mut stack.indices;
+            indices_to_traverse.clear();
+            indices_to_traverse.extend(parent_indices);
             while let Some(idx) = indices_to_traverse.pop() {
                 match lut.get(&all_oids[idx]) {
                     Some(Capsule::Compact(parent_indices)) => {
@@ -79,7 +83,9 @@ fn lookup_oid(
             }
         }
         Some(Capsule::Normal(parent_oids)) => {
-            let mut oids_to_traverse = parent_oids.clone();
+            let oids_to_traverse = &mut stack.oids;
+            oids_to_traverse.clear();
+            oids_to_traverse.extend(parent_oids);
             while let Some(oid) = oids_to_traverse.pop() {
                 match lut.get(&oid) {
                     Some(Capsule::Normal(parent_oids)) => {

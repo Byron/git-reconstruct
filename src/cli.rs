@@ -2,7 +2,7 @@ use failure::Error;
 use lut::{self, MultiReverseCommitGraph};
 use std::io::{stdin, stdout, BufRead, BufReader, Write};
 use git2::Oid;
-use Options;
+use {Options, Stack};
 use find;
 use indicatif::ProgressBar;
 
@@ -22,10 +22,11 @@ fn deplete_requests_from_stdin(luts: &MultiReverseCommitGraph) -> Result<(), Err
 
     eprintln!("Waiting for input...");
     let mut total_commits = 0;
+    let mut stack = Stack::default();
     for (hid, hexsha) in read.lines().filter_map(Result::ok).enumerate() {
         let oid = Oid::from_str(&hexsha)?;
 
-        lut::commits_by_blob(&oid, luts, &all_oids, &mut commits);
+        lut::commits_by_blob(&oid, luts, &all_oids, &mut stack, &mut commits);
         total_commits += commits.len();
 
         obuf.clear();

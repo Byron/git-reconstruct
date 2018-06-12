@@ -6,6 +6,7 @@ extern crate indicatif;
 extern crate structopt;
 extern crate crossbeam;
 extern crate num_cpus;
+extern crate walkdir;
 
 use failure::Error;
 use failure_tools::ok_or_exit;
@@ -95,12 +96,12 @@ mod find {
     use Capsule;
     use git2::Oid;
     use lut;
+    use walkdir::WalkDir;
 
-    pub fn commit(_tree: &Path, luts: Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
+    pub fn commit(tree: &Path, luts: Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
         let _all_oids = lut::commit_oids_table(&luts);
-        //        let mut commits = Vec::new();
-
-        //        let mut blobs = Vec
+        //        let mut blobs = Vec::new();
+        for _entry in WalkDir::new(tree).min_depth(1).follow_links(false) {}
         unimplemented!();
     }
 }

@@ -4,12 +4,10 @@ help:
 	$(info -Targets -----------------------------------------------------------------------------)
 	$(info -Development Targets -----------------------------------------------------------------)
 	$(info lint                         | run lints with clippy)
-	$(info legacy-test                  | run the old tests - need to put them into journey test)
 	$(info benchmark                    | just for fun, really)
 	$(info profile                      | only on linux - run callgrind and annotate it)
 	$(info journey-tests                | run all stateless journey test)
 	$(info continuous-journey-tests     | run all stateless journey test whenever something changes)
-	$(info continuous-legacy-test       | run the unit tests on changes)
 	$(info -- Use docker for all dependencies - run make interactively from there ----------------)
 	$(info interactive-developer-environment-in-docker | gives you everything you need to run all targets)
 
@@ -40,10 +38,4 @@ journey-tests: target/debug/git-commits-by-blob
 
 continuous-journey-tests:
 	watchexec $(MAKE) journey-tests
-
-legacy-test: target/debug/git-commits-by-blob
-	tests/test.sh $<
-
-continuous-legacy-test:
-	watchexec $(MAKE) legacy-test
 

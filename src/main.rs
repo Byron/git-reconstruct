@@ -111,8 +111,8 @@ mod find {
         // Given the numbers, the spike might not be that huge!
         let mut commit_to_blobs = BTreeMap::new();
         {
-            let (luts, all_oids) = lut::compact_by_blobs(&blobs, luts);
-            //            let all_oids = lut::commit_oids_table(&luts);
+                        let (luts, all_oids) = lut::compact_by_blobs(&blobs, luts);
+//            let all_oids = lut::commit_oids_table(&luts);
             let mut commits = Vec::new();
             let mut total_commits = 0;
             let mut stack = Stack::default();

@@ -10,6 +10,7 @@ use crossbeam;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
 const COMPACTION_PROGRESS_RATE: usize = 10000;
+const BLOB_COMPACTION_PROGRESS_RATE: usize = 25;
 
 pub type MultiReverseCommitGraph = Vec<BTreeMap<Oid, Capsule>>;
 
@@ -26,13 +27,68 @@ pub fn compact_by_blobs(
     // TODO Performance: can easily be threaded
     let progress = ProgressBar::new_spinner();
     let mut nluts = MultiReverseCommitGraph::new();
-    for lut in &luts {
+    let luts_len = luts.len();
+    for (lid, lut) in luts.into_iter().enumerate() {
         let mut nlut = BTreeMap::<Oid, Capsule>::new();
         let all_oids: Vec<_> = lut.keys().cloned().collect();
+        let mut stack = Stack::default();
 
-        for blob in blobs {
-            //            lookup_oid()
+        for (bid, blob) in blobs.iter().enumerate() {
+            match lut.get(blob) {
+                None => {}
+                Some(Capsule::Normal(parent_oids)) => {
+                    let oids_to_traverse = &mut stack.oids;
+                    oids_to_traverse.clear();
+                    nlut.insert(blob.clone(), Capsule::Normal(parent_oids.clone()));
+                    oids_to_traverse.extend(parent_oids);
+                    while let Some(oid) = oids_to_traverse.pop() {
+                        match lut.get(&oid) {
+                            Some(Capsule::Normal(parent_oids)) => {
+                                nlut.insert(oid.clone(), Capsule::Normal(parent_oids.clone()));
+                                oids_to_traverse.extend(parent_oids)
+                            }
+                            Some(Capsule::Compact(_)) => {
+                                unreachable!("LUT must be completely uncompacted in this branch")
+                            }
+                            None => unreachable!("Every item we see must be in the LUT"),
+                        }
+                    }
+                }
+                Some(Capsule::Compact(parent_indices)) => {
+                    let indices_to_traverse = &mut stack.indices;
+                    indices_to_traverse.clear();
+                    nlut.insert(blob.clone(), Capsule::Compact(parent_indices.clone()));
+                    indices_to_traverse.extend(parent_indices);
+                    while let Some(idx) = indices_to_traverse.pop() {
+                        let oid = all_oids[idx];
+                        match lut.get(&oid) {
+                            Some(Capsule::Compact(parent_indices)) => {
+                                nlut.insert(
+                                    oid.clone(),
+                                    Capsule::Compact(parent_indices.clone()),
+                                );
+                                indices_to_traverse.extend(parent_indices)
+                            }
+                            Some(Capsule::Normal(_)) => {
+                                unreachable!("LUT must be completely compacted in this branch")
+                            }
+                            None => unreachable!("Every item we see must be in the LUT"),
+                        }
+                    }
+                }
+            }
+            if bid % BLOB_COMPACTION_PROGRESS_RATE == 0 {
+                progress.set_message(&format!(
+                    "{}/{}: LUT compaction done for {} of {} blobs",
+                    lid,
+                    luts_len,
+                    bid,
+                    blobs.len()
+                ));
+                progress.tick();
+            }
         }
+        nluts.push(nlut);
     }
     progress.finish_and_clear();
 

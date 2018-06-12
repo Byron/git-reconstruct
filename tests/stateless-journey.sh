@@ -15,10 +15,18 @@ commit=dc595f7f016a0cff8b176a4c1e67483986f14816
 
 title "backend mode - lookup commits by blob"
 (when "finding the best commit by specifying a source tree"
-  it "succeeds" && {
-    WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-success" \
-    expect_run ${SUCCESSFULLY} "$exe" --head-only $PWD "$fixture/tree"
-  }
+  (when "no compaction"
+    it "succeeds" && {
+      WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-success" \
+      expect_run ${SUCCESSFULLY} "$exe" --no-compact --head-only $PWD "$fixture/tree"
+    }
+  )
+  (when "compaction"
+    it "succeeds" && {
+      WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-success" \
+      expect_run ${SUCCESSFULLY} "$exe" --head-only $PWD "$fixture/tree"
+    }
+  )
 )
 
 title "backend mode - lookup commits by blob"

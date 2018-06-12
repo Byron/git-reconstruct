@@ -11,7 +11,9 @@ use crossbeam;
 const COMMIT_PROGRESS_RATE: usize = 100;
 const COMPACTION_PROGRESS_RATE: usize = 10000;
 
-pub fn commit_oids_table(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Vec<Vec<Oid>> {
+pub type MultiReverseCommitGraph = Vec<BTreeMap<Oid, Capsule>>;
+
+pub fn commit_oids_table(luts: &MultiReverseCommitGraph) -> Vec<Vec<Oid>> {
     luts.iter()
         .map(|lut| lut.keys().cloned().collect())
         .collect()
@@ -19,7 +21,7 @@ pub fn commit_oids_table(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Vec<Vec<Oid>> {
 
 pub fn commits_by_blob(
     blob: &Oid,
-    luts: &Vec<BTreeMap<Oid, Capsule>>,
+    luts: &MultiReverseCommitGraph,
     all_oids: &Vec<Vec<Oid>>,
     out: &mut Vec<Oid>,
 ) {
@@ -66,7 +68,7 @@ pub fn commits_by_blob(
     }
 }
 
-pub fn build(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
+pub fn build(opts: Options) -> Result<MultiReverseCommitGraph, Error> {
     let repo = Repository::open(&opts.repository)?;
 
     let commits: Vec<_> = {
@@ -87,7 +89,8 @@ pub fn build(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
         for (chunk_idx, chunk_of_commits) in commits.chunks(commits.len() / num_threads).enumerate()
         {
             let progress = multiprogress.add(ProgressBar::new_spinner());
-            let repo = Repository::open(&opts.repository).unwrap();
+            let repo =
+                Repository::open(&opts.repository).expect("successful repository initialization");
             let no_compact = opts.no_compact;
             let mut lut = BTreeMap::new();
 
@@ -123,7 +126,7 @@ pub fn build(opts: Options) -> Result<Vec<BTreeMap<Oid, Capsule>>, Error> {
             });
             guards.push(guard);
         }
-        multiprogress.join_and_clear().unwrap();
+        multiprogress.join_and_clear().ok();
         for guard in guards {
             let (lut, edges, chunk_idx) = guard.join();
             luts.push((chunk_idx, lut));

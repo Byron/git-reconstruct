@@ -10,11 +10,12 @@ extern crate walkdir;
 
 use failure::Error;
 use failure_tools::ok_or_exit;
-use std::{collections::BTreeMap, io::{stdin, stdout, BufRead, BufReader, Write}, path::PathBuf};
+use std::{io::{stdin, stdout, BufRead, BufReader, Write}, path::PathBuf};
 use git2::{ObjectType, Oid};
 use structopt::StructOpt;
 
 mod lut;
+use lut::MultiReverseCommitGraph;
 
 #[derive(Clone)]
 pub enum Capsule {
@@ -54,7 +55,7 @@ pub struct Options {
     tree: Option<PathBuf>,
 }
 
-fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
+fn deplete_requests_from_stdin(luts: &MultiReverseCommitGraph) -> Result<(), Error> {
     let all_oids = lut::commit_oids_table(luts);
     let mut commits = Vec::new();
 
@@ -92,16 +93,35 @@ fn deplete_requests_from_stdin(luts: &Vec<BTreeMap<Oid, Capsule>>) -> Result<(),
 mod find {
     use failure::Error;
     use std::path::Path;
-    use std::collections::BTreeMap;
-    use Capsule;
     use git2::Oid;
-    use lut;
+    use lut::MultiReverseCommitGraph;
     use walkdir::WalkDir;
+    use git2::ObjectType;
+    use indicatif::ProgressBar;
 
-    pub fn commit(tree: &Path, luts: Vec<BTreeMap<Oid, Capsule>>) -> Result<(), Error> {
-        let _all_oids = lut::commit_oids_table(&luts);
-        //        let mut blobs = Vec::new();
-        for _entry in WalkDir::new(tree).min_depth(1).follow_links(false) {}
+    const HASHING_PROGRESS_RATE: usize = 25;
+
+    pub fn commit(tree: &Path, _luts: MultiReverseCommitGraph) -> Result<(), Error> {
+        let progress = ProgressBar::new_spinner();
+        let mut blobs = Vec::new();
+        for (eid, entry) in WalkDir::new(tree)
+            .sort_by(|a, b| a.file_name().cmp(b.file_name()))
+            .min_depth(1)
+            .follow_links(false)
+            .into_iter()
+            .enumerate()
+        {
+            let entry = entry?;
+            if entry.file_type().is_dir() {
+                continue;
+            }
+            blobs.push(Oid::hash_file(ObjectType::Blob, entry.file_name())?);
+            if eid % HASHING_PROGRESS_RATE == 0 {
+                progress.set_message(&format!("Hashed {} files...", eid));
+                progress.tick();
+            }
+        }
+        progress.finish_and_clear();
         unimplemented!();
     }
 }

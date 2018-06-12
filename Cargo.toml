@@ -1,5 +1,5 @@
 [package]
-name = "git-commits-by-blob"
+name = "git-reconstruct"
 version = "1.0.0"
 authors = ["Sebastian Thiel <byronimo@gmail.com>"]
 publish = false

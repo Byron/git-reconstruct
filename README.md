@@ -1,4 +1,7 @@
-A backend for https://github.com/ali1234/gitxref/tree/master/gitxref
+An implementation inspired by https://framagit.org/GNUtoo/reconstruct-git-history and by 
+https://github.com/ali1234/gitxref.
+
+Many thanks to https://github.com/ali1234 who motivated me a lot!
 
 Compile and use:
 
@@ -10,7 +13,7 @@ cargo build --release
 Now run it like this:
 
 ```
-echo dc595f7f016a0cff8b176a4c1e67483986f14816 | git-commits-by-blobs <path-to-repo>
+echo dc595f7f016a0cff8b176a4c1e67483986f14816 | git-reconstructs <path-to-repo>
 ```
 
 ### Usage 

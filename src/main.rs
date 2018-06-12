@@ -36,7 +36,7 @@ pub struct Stack {
 
 /// A basic example
 #[derive(StructOpt, Debug)]
-#[structopt(name = "git-commits-by-blob")]
+#[structopt(name = "git-reconstruct")]
 pub struct Options {
     /// The amount of threads to use. If unset, defaults to amount of physical CPUs
     #[structopt(short = "t", long = "threads")]

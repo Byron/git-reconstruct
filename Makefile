@@ -17,23 +17,23 @@ interactive-developer-environment-in-docker:
 	docker build -t $(docker_image) - < etc/developer.Dockerfile
 	docker run -v $$PWD:/volume -w /volume -it $(docker_image)
 
-target/debug/git-commits-by-blob: always
+target/debug/git-reconstruct: always
 	cargo build
 
-target/release/git-commits-by-blob: always
+target/release/git-reconstruct: always
 	cargo build --release
 
 lint:
 	cargo clippy
 
-profile: target/release/git-commits-by-blob
+profile: target/release/git-reconstruct
 	valgrind --callgrind-out-file=callgrind.profile --tool=callgrind  $< >/dev/null
 	callgrind_annotate --auto=yes callgrind.profile
 
-benchmark: target/release/git-commits-by-blob
+benchmark: target/release/git-reconstruct
 	hyperfine '$<'
 
-journey-tests: target/debug/git-commits-by-blob
+journey-tests: target/debug/git-reconstruct
 	./tests/stateless-journey.sh $<
 
 continuous-journey-tests:

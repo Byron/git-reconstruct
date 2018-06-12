@@ -84,7 +84,7 @@ mod find {
             .enumerate()
         {
             let entry = entry?;
-            // TODO: assure symlinks are hashed correctly (must assure not follow it)
+            // TODO: assure symlinks are hashed correctly (must assure not follow it, which it does)
             if !entry.file_type().is_file() {
                 continue;
             }

@@ -100,7 +100,7 @@ mod find {
                 total_commits += commits.len();
 
                 for &commit_index in &commits {
-                    let bits = &mut commit_indices_to_blobs[commit_index];
+                    let bits = unsafe { commit_indices_to_blobs.get_unchecked_mut(commit_index) };
                     if bits.len() == 0 {
                         bits.grow(blobs.len());
                     }

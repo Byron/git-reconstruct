@@ -1,18 +1,167 @@
 use failure::Error;
-use std::collections::{BTreeMap, btree_map::Entry};
+use std::{mem, collections::{BTreeMap, btree_map::Entry}};
 use git2::{ObjectType, Oid, Repository, Revwalk, Tree};
 use indicatif::{MultiProgress, ProgressBar};
+use {Capsule, Stack};
 use Options;
 use num_cpus;
 use git2;
 use crossbeam;
-use fixedbitset::FixedBitSet;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
+const COMPACTION_PROGRESS_RATE: usize = 10000;
+const BLOB_COMPACTION_PROGRESS_RATE: usize = 25;
 
-pub type CommitBlobMasks = Vec<(Oid, FixedBitSet)>;
+pub type MultiReverseCommitGraph = Vec<BTreeMap<Oid, Capsule>>;
 
-pub fn build(_blobs: &Vec<Oid>, opts: Options) -> Result<CommitBlobMasks, Error> {
+pub fn commit_oids_table(luts: &MultiReverseCommitGraph) -> Vec<Vec<Oid>> {
+    luts.iter()
+        .map(|lut| lut.keys().cloned().collect())
+        .collect()
+}
+
+pub fn compact_by_blobs(
+    blobs: &Vec<Oid>,
+    luts: MultiReverseCommitGraph,
+) -> (MultiReverseCommitGraph, Vec<Vec<Oid>>) {
+    // TODO Performance: can easily be threaded
+    let progress = ProgressBar::new_spinner();
+    let mut nluts = MultiReverseCommitGraph::new();
+    let luts_len = luts.len();
+    for (lid, lut) in luts.into_iter().enumerate() {
+        let mut nlut = BTreeMap::<Oid, Capsule>::new();
+        let all_oids: Vec<_> = lut.keys().cloned().collect();
+        let mut stack = Stack::default();
+
+        for (bid, blob) in blobs.iter().enumerate() {
+            match lut.get(blob) {
+                None => {}
+                Some(Capsule::Normal(parent_oids)) => {
+                    let oids_to_traverse = &mut stack.oids;
+                    oids_to_traverse.clear();
+                    nlut.insert(blob.clone(), Capsule::Normal(parent_oids.clone()));
+                    oids_to_traverse.extend(parent_oids);
+                    while let Some(oid) = oids_to_traverse.pop() {
+                        match lut.get(&oid) {
+                            Some(Capsule::Normal(parent_oids)) => {
+                                nlut.insert(oid.clone(), Capsule::Normal(parent_oids.clone()));
+                                oids_to_traverse.extend(parent_oids)
+                            }
+                            Some(Capsule::Compact(_)) => {
+                                unreachable!("LUT must be completely uncompacted in this branch")
+                            }
+                            None => unreachable!("Every item we see must be in the LUT"),
+                        }
+                    }
+                }
+                Some(Capsule::Compact(parent_indices)) => {
+                    let indices_to_traverse = &mut stack.indices;
+                    indices_to_traverse.clear();
+                    nlut.insert(blob.clone(), Capsule::Compact(parent_indices.clone()));
+                    indices_to_traverse.extend(parent_indices);
+                    while let Some(idx) = indices_to_traverse.pop() {
+                        let oid = all_oids[idx];
+                        match lut.get(&oid) {
+                            Some(Capsule::Compact(parent_indices)) => {
+                                nlut.insert(
+                                    oid.clone(),
+                                    Capsule::Compact(parent_indices.clone()),
+                                );
+                                indices_to_traverse.extend(parent_indices)
+                            }
+                            Some(Capsule::Normal(_)) => {
+                                unreachable!("LUT must be completely compacted in this branch")
+                            }
+                            None => unreachable!("Every item we see must be in the LUT"),
+                        }
+                    }
+                }
+            }
+            if bid % BLOB_COMPACTION_PROGRESS_RATE == 0 {
+                progress.set_message(&format!(
+                    "{}/{}: LUT compaction done for {} of {} blobs",
+                    lid,
+                    luts_len,
+                    bid,
+                    blobs.len()
+                ));
+                progress.tick();
+            }
+        }
+        nluts.push(nlut);
+    }
+    progress.finish_and_clear();
+
+    let all_oids = commit_oids_table(&nluts);
+    (nluts, all_oids)
+}
+
+pub fn commits_by_blob(
+    blob: &Oid,
+    luts: &MultiReverseCommitGraph,
+    all_oids: &Vec<Vec<Oid>>,
+    stack: &mut Stack,
+    out: &mut Vec<Oid>,
+) {
+    for (lut, all_oids) in luts.iter().zip(all_oids) {
+        lookup_oid(&blob, lut, all_oids, stack, out)
+    }
+}
+
+fn lookup_oid(
+    blob: &Oid,
+    lut: &BTreeMap<Oid, Capsule>,
+    all_oids: &Vec<Oid>,
+    stack: &mut Stack,
+    out: &mut Vec<Oid>,
+) -> () {
+    match lut.get(blob) {
+        None => {}
+        Some(Capsule::Compact(parent_indices)) => {
+            out.clear();
+            let indices_to_traverse = &mut stack.indices;
+            indices_to_traverse.clear();
+            indices_to_traverse.extend(parent_indices);
+            while let Some(idx) = indices_to_traverse.pop() {
+                match lut.get(&all_oids[idx]) {
+                    Some(Capsule::Compact(parent_indices)) => {
+                        if parent_indices.is_empty() {
+                            out.push(all_oids[idx]);
+                        } else {
+                            indices_to_traverse.extend(parent_indices)
+                        }
+                    }
+                    Some(Capsule::Normal(_)) => {
+                        unreachable!("LUT must be completely compacted in this branch")
+                    }
+                    None => unreachable!("Every item we see must be in the LUT"),
+                }
+            }
+        }
+        Some(Capsule::Normal(parent_oids)) => {
+            let oids_to_traverse = &mut stack.oids;
+            oids_to_traverse.clear();
+            oids_to_traverse.extend(parent_oids);
+            while let Some(oid) = oids_to_traverse.pop() {
+                match lut.get(&oid) {
+                    Some(Capsule::Normal(parent_oids)) => {
+                        if parent_oids.is_empty() {
+                            out.push(oid)
+                        } else {
+                            oids_to_traverse.extend(parent_oids)
+                        }
+                    }
+                    Some(Capsule::Compact(_)) => {
+                        unreachable!("LUT must be completely uncompacted in this branch")
+                    }
+                    None => unreachable!("Every item we see must be in the LUT"),
+                }
+            }
+        }
+    }
+}
+
+pub fn build(opts: Options) -> Result<MultiReverseCommitGraph, Error> {
     let repo = Repository::open(&opts.repository)?;
 
     let commits: Vec<_> = {
@@ -24,7 +173,7 @@ pub fn build(_blobs: &Vec<Oid>, opts: Options) -> Result<CommitBlobMasks, Error>
 
     let multiprogress = MultiProgress::new();
 
-    let mut results: Vec<_> = Vec::new();
+    let mut luts: Vec<_> = Vec::new();
     let num_threads = opts.threads.unwrap_or_else(num_cpus::get_physical);
     let mut total_refs = 0;
 
@@ -35,8 +184,8 @@ pub fn build(_blobs: &Vec<Oid>, opts: Options) -> Result<CommitBlobMasks, Error>
             let progress = multiprogress.add(ProgressBar::new_spinner());
             let repo =
                 Repository::open(&opts.repository).expect("successful repository initialization");
-            let mut mask = CommitBlobMasks::new();
-            let mut seen = BTreeMap::<Oid, ()>::new();
+            let compact = !opts.no_compact;
+            let mut lut = BTreeMap::new();
 
             let guard = scope.spawn(move || {
                 let (mut num_commits, mut total_refs) = (0, 0);
@@ -45,70 +194,94 @@ pub fn build(_blobs: &Vec<Oid>, opts: Options) -> Result<CommitBlobMasks, Error>
                     if let Ok(object) = repo.find_object(commit_oid, Some(ObjectType::Commit)) {
                         let commit = object.into_commit().expect("to have commit");
                         let tree = commit.tree().expect("commit to have tree");
-                        if not_has_seen(tree.id(), &mut seen) {
-                            total_refs += recurse_tree(&repo, tree, &mut seen);
+                        lut.insert(commit_oid, Capsule::Normal(Vec::new()));
+                        if insert_parent_and_has_not_seen_child(commit_oid, tree.id(), &mut lut) {
+                            total_refs += recurse_tree(&repo, tree, &mut lut);
                         }
                     }
                     if num_commits % COMMIT_PROGRESS_RATE == 0 {
                         progress.set_message(&format!(
-                            "{} Commits done; traversed tree with {} vertices and a total of {} edges",
+                            "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
                             num_commits,
-                            seen.len(),
+                            lut.len(),
                             total_refs
                         ));
                         progress.tick();
                     }
                 }
+                if compact {
+                    compact_memory(&mut lut, &progress);
+                } else {
+                    eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")
+                }
                 progress.finish_and_clear();
-                (mask, total_refs, chunk_idx)
+                (lut, total_refs, chunk_idx)
             });
             guards.push(guard);
         }
         multiprogress.join_and_clear().ok();
         for guard in guards {
-            let (masks, edges, chunk_idx) = guard.join();
-            results.push((chunk_idx, masks));
+            let (lut, edges, chunk_idx) = guard.join();
+            luts.push((chunk_idx, lut));
             total_refs += edges;
         }
     });
 
-    results.sort_by_key(|(chunk_idx, _)| *chunk_idx);
-    let mut all_masks = CommitBlobMasks::new();
-    for mut mask in results.drain(..).map(|(_, r)| r) {
-        all_masks.extend(mask.drain(..));
-    }
-    Ok(all_masks)
+    luts.sort_by_key(|(chunk_idx, _)| *chunk_idx);
+    let luts: Vec<_> = luts.drain(..).map(|(_, lut)| lut).collect();
+
+    eprintln!(
+        "READY: Build reverse-tree from {} commits with table of {} entries and {} parent-edges",
+        commits.len(),
+        luts.iter().map(|l| l.len()).sum::<usize>(),
+        total_refs
+    );
+    Ok(luts)
 }
 
-fn not_has_seen(child_oid: Oid, lut: &mut BTreeMap<Oid, ()>) -> bool {
+fn insert_parent_and_has_not_seen_child(
+    parent_oid: Oid,
+    child_oid: Oid,
+    lut: &mut BTreeMap<Oid, Capsule>,
+) -> bool {
     match lut.entry(child_oid) {
-        Entry::Occupied(_) => false,
+        Entry::Occupied(mut entry) => {
+            if let Capsule::Normal(ref mut parents) = entry.get_mut() {
+                parents.push(parent_oid);
+            }
+            false
+        }
         Entry::Vacant(entry) => {
-            entry.insert(());
+            entry.insert(Capsule::Normal(vec![parent_oid]));
             true
         }
     }
 }
 
-fn recurse_tree(repo: &Repository, tree: Tree, seen: &mut BTreeMap<Oid, ()>) -> usize {
+fn recurse_tree(repo: &Repository, tree: Tree, lut: &mut BTreeMap<Oid, Capsule>) -> usize {
     use ObjectType::*;
     let mut refs = 0;
     for item in tree.iter() {
         match item.kind() {
             Some(Tree) => {
-                if not_has_seen(item.id(), seen) {
+                if insert_parent_and_has_not_seen_child(tree.id(), item.id(), lut) {
                     refs += recurse_tree(
                         repo,
                         item.to_object(repo)
                             .expect("valid object")
                             .into_tree()
                             .expect("tree"),
-                        seen,
+                        lut,
                     )
                 }
             }
             Some(Blob) => {
                 refs += 1;
+                if let Capsule::Normal(ref mut parents) = lut.entry(item.id())
+                    .or_insert_with(|| Capsule::Normal(Vec::new()))
+                {
+                    parents.push(tree.id());
+                }
             }
             _ => continue,
         }
@@ -133,4 +306,25 @@ fn setup_walk(repo: &Repository, walk: &mut Revwalk, head_only: bool) -> Result<
         }
     }
     Ok(())
+}
+
+fn compact_memory(lut: &mut BTreeMap<Oid, Capsule>, progress: &ProgressBar) -> () {
+    let all_oids: Vec<_> = lut.keys().cloned().collect();
+    for (cid, capsule) in lut.values_mut().enumerate() {
+        let mut compacted = Vec::new();
+        if let Capsule::Normal(ref mut parent_oids) = capsule {
+            compacted = Vec::with_capacity(parent_oids.len());
+            for oid in parent_oids {
+                let parent_idx = all_oids
+                    .binary_search(oid)
+                    .expect("parent to be found in sorted list");
+                compacted.push(parent_idx);
+            }
+        }
+        mem::replace(capsule, Capsule::Compact(compacted));
+        if cid % COMPACTION_PROGRESS_RATE == 0 {
+            progress.set_message(&format!("Compacted {} of {} edges...", cid, all_oids.len(),));
+            progress.tick();
+        }
+    }
 }

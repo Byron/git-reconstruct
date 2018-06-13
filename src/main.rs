@@ -11,7 +11,7 @@ extern crate walkdir;
 
 use failure_tools::ok_or_exit;
 use std::path::PathBuf;
-use git2::ObjectType;
+use git2::{ObjectType, Oid};
 use structopt::StructOpt;
 
 mod lut;
@@ -20,6 +20,18 @@ mod cli;
 fn main() {
     let opts = Options::from_args();
     ok_or_exit(cli::run(opts));
+}
+
+#[derive(Clone)]
+pub enum Capsule {
+    Normal(Vec<Oid>),
+    Compact(Vec<usize>),
+}
+
+#[derive(Default)]
+pub struct Stack {
+    indices: Vec<usize>,
+    oids: Vec<Oid>,
 }
 
 /// A basic example
@@ -46,21 +58,28 @@ pub struct Options {
     repository: PathBuf,
 
     /// The directory tree for which to figure out the merge commit.
+    /// If unspecified, the program will serve as blob-to-commits lookup table,
+    /// receiving hex-shas of blobs, one per line, on stdin and outputting
+    /// all commits knowing that blob on stdout, separated by space, terminated
+    /// by newline.
     #[structopt(name = "tree-to-integrate", parse(from_os_str))]
-    tree: PathBuf,
+    tree: Option<PathBuf>,
 }
 
 mod find {
+    use fixedbitset::FixedBitSet;
     use failure::{Error, ResultExt};
-    use std::path::Path;
+    use std::{collections::BTreeMap, path::Path};
     use git2::Oid;
+    use lut::{self, MultiReverseCommitGraph};
     use walkdir::WalkDir;
     use git2::ObjectType;
     use indicatif::ProgressBar;
+    use Stack;
 
     const HASHING_PROGRESS_RATE: usize = 25;
 
-    pub fn generate_blob_hashes(tree: &Path) -> Result<Vec<Oid>, Error> {
+    pub fn commit(tree: &Path, luts: MultiReverseCommitGraph) -> Result<(), Error> {
         let progress = ProgressBar::new_spinner();
         let mut blobs = Vec::new();
         for (eid, entry) in WalkDir::new(tree)
@@ -82,7 +101,43 @@ mod find {
                 progress.tick();
             }
         }
+
+        // TODO PERFORMANCE: allow compacting memory so lookup only contains the tree reachable
+        // by blobs. It looks like it's too intense to prune the existing map. Instead one should
+        // rebuild a new lut, but that would generate a memory spike. Maybe less of a problem
+        // if compaction ran before (so we have enough). It's also unclear if that will make
+        // anything faster, and if not, those who have no memory anyway can't afford the spike
+        // If there is a good way, it could be valuable, as 55k is way less than 1832k!
+        // Given the numbers, the spike might not be that huge!
+        let mut commit_to_blobs = BTreeMap::new();
+        {
+                        let (luts, all_oids) = lut::compact_by_blobs(&blobs, luts);
+//            let all_oids = lut::commit_oids_table(&luts);
+            let mut commits = Vec::new();
+            let mut total_commits = 0;
+            let mut stack = Stack::default();
+            for (bid, blob) in blobs.iter().enumerate() {
+                lut::commits_by_blob(&blob, &luts, &all_oids, &mut stack, &mut commits);
+                total_commits += commits.len();
+
+                for commit in &commits {
+                    commit_to_blobs
+                        .entry(commit.clone())
+                        .or_insert_with(|| FixedBitSet::with_capacity(blobs.len()))
+                        .put(bid);
+                }
+
+                progress.set_message(&format!(
+                    "{}/{}: Ticking blob bits, saw {} commits so far...",
+                    bid,
+                    blobs.len(),
+                    total_commits
+                ));
+                progress.tick();
+            }
+            drop(luts);
+        }
         progress.finish_and_clear();
-        Ok(blobs)
+        unimplemented!();
     }
 }

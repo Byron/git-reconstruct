@@ -17,6 +17,42 @@ pub struct ReverseGraph {
 }
 
 impl ReverseGraph {
+    fn optimize_topology(&mut self, progress: &ProgressBar) -> usize {
+        let mut total_removed = 0;
+        for pass in 0.. {
+            let edges_removed = self.optimize_topology_once();
+            if edges_removed == 0 {
+                break;
+            }
+            total_removed += edges_removed;
+            progress.set_message(&format!("Pass {}: {} edges removed", pass, edges_removed));
+            progress.tick();
+        }
+        total_removed
+    }
+
+    fn optimize_topology_once(&mut self) -> usize {
+        let mut parents_to_adjust = Vec::new();
+
+        for vtx in 0..self.len() {
+            let edges = &self.vertices_to_edges[vtx];
+            if edges.len() == 1 {
+                let parent_vtx = edges[0];
+                let parent_edges = &self.vertices_to_edges[parent_vtx];
+                if parent_edges.len() == 1 {
+                    parents_to_adjust.push((vtx, parent_vtx));
+                }
+            }
+        }
+
+        let removed = parents_to_adjust.len();
+        for (child, parent_to_skip) in parents_to_adjust {
+            let parent_edges = self.vertices_to_edges[parent_to_skip].clone();
+            self.vertices_to_edges[child] = parent_edges;
+        }
+
+        removed
+    }
     fn compact(&mut self, progress: &ProgressBar) {
         let own_len = self.vertices_to_edges.len();
         for (eid, mut edges) in &mut self.vertices_to_edges.iter_mut().enumerate() {
@@ -124,6 +160,9 @@ pub fn build(opts: Options) -> Result<ReverseGraph, Error> {
             progress.tick();
         }
     }
+    let total_removed = graph.optimize_topology(&progress);
+    edges_total -= total_removed;
+    eprintln!("Removed {} unnecessary edges", total_removed);
     graph.compact(&progress);
     progress.finish_and_clear();
 

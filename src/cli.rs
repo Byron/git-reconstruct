@@ -1,15 +1,15 @@
 use failure::Error;
-use lut::{self, MultiReverseCommitGraph};
+use lut;
 use std::io::{stdin, stdout, BufRead, BufReader, Write};
 use git2::Oid;
 use {Options, Stack};
 use find;
 use indicatif::ProgressBar;
+use lut::ReverseGraph;
 
 const PROGRESS_RATE: usize = 25;
 
-fn deplete_requests_from_stdin(luts: &MultiReverseCommitGraph) -> Result<(), Error> {
-    let all_oids = lut::commit_oids_table(luts);
+fn deplete_requests_from_stdin(graphs: &[ReverseGraph]) -> Result<(), Error> {
     let mut commits = Vec::new();
 
     let stdin = stdin();
@@ -26,7 +26,7 @@ fn deplete_requests_from_stdin(luts: &MultiReverseCommitGraph) -> Result<(), Err
     for (hid, hexsha) in read.lines().filter_map(Result::ok).enumerate() {
         let oid = Oid::from_str(&hexsha)?;
 
-        lut::commits_by_blob(&oid, luts, &all_oids, &mut stack, &mut commits);
+        lut::commits_by_blob(&oid, graphs, &mut stack, &mut commits);
         total_commits += commits.len();
 
         obuf.clear();
@@ -57,11 +57,9 @@ fn deplete_requests_from_stdin(luts: &MultiReverseCommitGraph) -> Result<(), Err
 
 pub fn run(opts: Options) -> Result<(), Error> {
     let tree = opts.tree.clone();
-    let luts = lut::build2(opts)?;
-    Ok(())
-    //    let luts = lut::build(opts)?;
-    //    match tree {
-    //        None => deplete_requests_from_stdin(&luts),
-    //        Some(tree) => find::commit(&tree, luts),
-    //    }
+    let graphs = lut::build(opts)?;
+    match tree {
+        None => deplete_requests_from_stdin(&graphs),
+        Some(tree) => find::commit(&tree, graphs),
+    }
 }

@@ -11,7 +11,7 @@ extern crate walkdir;
 
 use failure_tools::ok_or_exit;
 use std::path::PathBuf;
-use git2::{ObjectType, Oid};
+use git2::ObjectType;
 use structopt::StructOpt;
 
 mod lut;
@@ -22,16 +22,9 @@ fn main() {
     ok_or_exit(cli::run(opts));
 }
 
-#[derive(Clone)]
-pub enum Capsule {
-    Normal(Vec<Oid>),
-    Compact(Vec<usize>),
-}
-
 #[derive(Default)]
 pub struct Stack {
     indices: Vec<usize>,
-    oids: Vec<Oid>,
 }
 
 /// A basic example
@@ -41,11 +34,6 @@ pub struct Options {
     /// The amount of threads to use. If unset, defaults to amount of physical CPUs
     #[structopt(short = "t", long = "threads")]
     threads: Option<usize>,
-
-    /// If set, you will trade in about 35% increase in memory for about 30% less time till ready
-    /// for queries
-    #[structopt(long = "no-compact")]
-    no_compact: bool,
 
     /// If set, traversal will only happen along the checked-out head.
     /// Otherwise it will take into consideration all remote branches, too
@@ -71,15 +59,16 @@ mod find {
     use failure::{Error, ResultExt};
     use std::{collections::BTreeMap, path::Path};
     use git2::Oid;
-    use lut::{self, MultiReverseCommitGraph};
+    use lut;
     use walkdir::WalkDir;
     use git2::ObjectType;
     use indicatif::ProgressBar;
     use Stack;
+    use lut::ReverseGraph;
 
     const HASHING_PROGRESS_RATE: usize = 25;
 
-    pub fn commit(tree: &Path, luts: MultiReverseCommitGraph) -> Result<(), Error> {
+    pub fn commit(tree: &Path, graphs: Vec<ReverseGraph>) -> Result<(), Error> {
         let progress = ProgressBar::new_spinner();
         let mut blobs = Vec::new();
         for (eid, entry) in WalkDir::new(tree)
@@ -102,22 +91,13 @@ mod find {
             }
         }
 
-        // TODO PERFORMANCE: allow compacting memory so lookup only contains the tree reachable
-        // by blobs. It looks like it's too intense to prune the existing map. Instead one should
-        // rebuild a new lut, but that would generate a memory spike. Maybe less of a problem
-        // if compaction ran before (so we have enough). It's also unclear if that will make
-        // anything faster, and if not, those who have no memory anyway can't afford the spike
-        // If there is a good way, it could be valuable, as 55k is way less than 1832k!
-        // Given the numbers, the spike might not be that huge!
-        // TOO SLOW right now
         let mut commit_to_blobs = BTreeMap::new();
         {
-            let all_oids = lut::commit_oids_table(&luts);
             let mut commits = Vec::new();
             let mut total_commits = 0;
             let mut stack = Stack::default();
             for (bid, blob) in blobs.iter().enumerate() {
-                lut::commits_by_blob(&blob, &luts, &all_oids, &mut stack, &mut commits);
+                lut::commits_by_blob(&blob, &graphs, &mut stack, &mut commits);
                 total_commits += commits.len();
 
                 for commit in &commits {
@@ -135,7 +115,7 @@ mod find {
                 ));
                 progress.tick();
             }
-            drop(luts);
+            drop(graphs);
         }
         progress.finish_and_clear();
         unimplemented!();

@@ -8,6 +8,10 @@ extern crate crossbeam;
 extern crate fixedbitset;
 extern crate num_cpus;
 extern crate walkdir;
+#[macro_use]
+extern crate serde_derive;
+extern crate bincode;
+extern crate serde;
 
 use failure_tools::ok_or_exit;
 use std::path::PathBuf;
@@ -40,6 +44,13 @@ pub struct Options {
     /// Also useful for bare-repositories
     #[structopt(long = "head-only")]
     head_only: bool,
+
+    /// The path at which to look for a graph cache. If a file exists at the given path,
+    /// it will be loaded as graph cache.
+    /// Otherwise a graph cache will be written out before proceeding as normal.
+    /// Refresh the cache by deleting the file.
+    #[structopt(name = "CACHE", long = "cache-path", parse(from_os_str))]
+    cache_path: Option<PathBuf>,
 
     /// the repository to index for queries
     #[structopt(name = "REPOSITORY", parse(from_os_str))]
@@ -123,6 +134,7 @@ mod find {
             blobs.len(),
             total_commits
         );
-        unimplemented!();
+        eprintln!("unimplemented");
+        Ok(())
     }
 }

@@ -5,6 +5,8 @@ use indicatif::ProgressBar;
 use Stack;
 use Options;
 use git2;
+use bincode::{deserialize_from, serialize_into};
+use std::io;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
 const COMPACTION_PROGRESS_RATE: usize = 10000;
@@ -16,7 +18,66 @@ pub struct ReverseGraph {
     oids_to_vertices: BTreeMap<Oid, usize>,
 }
 
+#[derive(Deserialize, Serialize)]
+struct Sha1([u8; 20]);
+
+impl From<Oid> for Sha1 {
+    fn from(f: Oid) -> Self {
+        let mut s = [0; 20];
+        s.copy_from_slice(f.as_bytes());
+        Sha1(s)
+    }
+}
+
+impl From<Sha1> for Oid {
+    fn from(s: Sha1) -> Self {
+        Oid::from_bytes(&s.0).expect("sha1 to have just 20 bytes")
+    }
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct StorableReverseGraph {
+    vertices_to_oid: Vec<Sha1>,
+    vertices_to_edges: Vec<Vec<usize>>,
+    oids_to_vertices: Vec<(Sha1, usize)>,
+}
+
+impl StorableReverseGraph {
+    pub fn save(self, out: impl io::Write) -> Result<Self, Error> {
+        eprintln!("Saving graph...");
+        serialize_into(out, &self)?;
+        Ok(self)
+    }
+    pub fn load(input: impl io::Read) -> Result<StorableReverseGraph, Error> {
+        eprintln!("Loading graph...");
+        deserialize_from(input).map_err(Into::into)
+    }
+    pub fn into_memory(self) -> ReverseGraph {
+        ReverseGraph {
+            vertices_to_oid: self.vertices_to_oid.into_iter().map(Into::into).collect(),
+            vertices_to_edges: self.vertices_to_edges,
+            oids_to_vertices: self.oids_to_vertices.into_iter().fold(
+                BTreeMap::new(),
+                |mut acc, (oid, vtx)| {
+                    acc.insert(oid.into(), vtx);
+                    acc
+                },
+            ),
+        }
+    }
+}
+
 impl ReverseGraph {
+    pub fn into_storage(self) -> StorableReverseGraph {
+        StorableReverseGraph {
+            vertices_to_oid: self.vertices_to_oid.into_iter().map(Into::into).collect(),
+            vertices_to_edges: self.vertices_to_edges,
+            oids_to_vertices: self.oids_to_vertices
+                .into_iter()
+                .map(|(oid, vtx)| (oid.into(), vtx))
+                .collect(),
+        }
+    }
     fn optimize_topology(&mut self, progress: &ProgressBar) -> Option<(usize, usize)> {
         let mut total_removed = 0;
         let mut last_pass = 0;
@@ -45,7 +106,7 @@ impl ReverseGraph {
             if edges.len() == 1 {
                 let parent_vtx = edges[0];
                 let parent_edges = &self.vertices_to_edges[parent_vtx];
-                if parent_edges.len() == 1 {
+                if parent_edges.len() < 2 {
                     parents_to_adjust.push((vtx, parent_vtx));
                 }
             }
@@ -135,7 +196,7 @@ impl ReverseGraph {
     }
 }
 
-pub fn build(opts: Options) -> Result<ReverseGraph, Error> {
+pub fn build(opts: &Options) -> Result<ReverseGraph, Error> {
     let repo = Repository::open(&opts.repository)?;
 
     let mut walk = repo.revwalk()?;
@@ -168,7 +229,10 @@ pub fn build(opts: Options) -> Result<ReverseGraph, Error> {
     }
     if let Some((passes, total_removed)) = graph.optimize_topology(&progress) {
         edges_total -= total_removed;
-        eprintln!("Removed {} unnecessary edges in {} passes", total_removed, passes);
+        eprintln!(
+            "Removed {} unnecessary edges in {} passes",
+            total_removed, passes
+        );
     }
     graph.compact(&progress);
     progress.finish_and_clear();

@@ -22,8 +22,10 @@ fn deplete_requests_from_stdin(graphs: &[ReverseGraph]) -> Result<(), Error> {
 
     eprintln!("Waiting for input...");
     let mut total_commits = 0;
+    let mut num_blobs = 0;
     let mut stack = Stack::default();
-    for (hid, hexsha) in read.lines().filter_map(Result::ok).enumerate() {
+    for hexsha in read.lines().filter_map(Result::ok) {
+        num_blobs += 1;
         let oid = Oid::from_str(&hexsha)?;
 
         lut::commits_by_blob(&oid, graphs, &mut stack, &mut commits);
@@ -43,14 +45,18 @@ fn deplete_requests_from_stdin(graphs: &[ReverseGraph]) -> Result<(), Error> {
         write!(out, "{}", obuf)?;
         out.flush()?;
 
-        if hid % PROGRESS_RATE == 0 {
+        if num_blobs % PROGRESS_RATE == 0 {
             progress.set_message(&format!(
                 "Looked up {} blobs with a total of {} commits",
-                hid, total_commits
+                num_blobs, total_commits
             ));
             progress.tick();
         }
     }
+    eprintln!(
+        "DONE: Looked up {} blobs with a total of {} commits",
+        num_blobs, total_commits
+    );
     progress.finish_and_clear();
     Ok(())
 }

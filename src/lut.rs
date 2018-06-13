@@ -17,9 +17,11 @@ pub struct ReverseGraph {
 }
 
 impl ReverseGraph {
-    fn optimize_topology(&mut self, progress: &ProgressBar) -> usize {
+    fn optimize_topology(&mut self, progress: &ProgressBar) -> Option<(usize, usize)> {
         let mut total_removed = 0;
-        for pass in 0.. {
+        let mut last_pass = 0;
+        for pass in 1.. {
+            last_pass = pass;
             let edges_removed = self.optimize_topology_once();
             if edges_removed == 0 {
                 break;
@@ -28,7 +30,11 @@ impl ReverseGraph {
             progress.set_message(&format!("Pass {}: {} edges removed", pass, edges_removed));
             progress.tick();
         }
-        total_removed
+        if total_removed == 0 {
+            None
+        } else {
+            Some((last_pass, total_removed))
+        }
     }
 
     fn optimize_topology_once(&mut self) -> usize {
@@ -160,9 +166,10 @@ pub fn build(opts: Options) -> Result<ReverseGraph, Error> {
             progress.tick();
         }
     }
-    let total_removed = graph.optimize_topology(&progress);
-    edges_total -= total_removed;
-    eprintln!("Removed {} unnecessary edges", total_removed);
+    if let Some((passes, total_removed)) = graph.optimize_topology(&progress) {
+        edges_total -= total_removed;
+        eprintln!("Removed {} unnecessary edges in {} passes", total_removed, passes);
+    }
     graph.compact(&progress);
     progress.finish_and_clear();
 

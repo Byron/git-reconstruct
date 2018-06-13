@@ -39,7 +39,7 @@ impl ReverseGraph {
     fn insert_parent_get_new_child_id(&mut self, parent: usize, child: Oid) -> Option<usize> {
         match self.oids_to_vertices.entry(child) {
             Entry::Occupied(entry) => {
-                self.vertices_to_edges[*entry.get()].push(parent);
+                unsafe { self.vertices_to_edges.get_unchecked_mut(*entry.get()) }.push(parent);
                 None
             }
             Entry::Vacant(entry) => {

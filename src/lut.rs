@@ -55,7 +55,7 @@ impl ReverseGraph {
         self.vertices_to_oid.len()
     }
     // TODO: dedup
-    pub fn lookup_idx(&self, blob: &Oid, stack: &mut Stack, out: &mut Vec<usize>) {
+    pub fn _lookup_idx(&self, blob: &Oid, stack: &mut Stack, out: &mut Vec<usize>) {
         match self.oids_to_vertices.get(blob) {
             None => {}
             Some(idx) => {
@@ -99,7 +99,7 @@ pub fn commits_by_blob(blob: &Oid, states: &[ReverseGraph], stack: &mut Stack, o
         state.lookup(&blob, stack, out);
     }
 }
-pub fn commit_indices_by_blob(
+pub fn _commit_indices_by_blob(
     blob: &Oid,
     states: &[ReverseGraph],
     stack: &mut Stack,
@@ -107,7 +107,7 @@ pub fn commit_indices_by_blob(
 ) {
     out.clear();
     for state in states {
-        state.lookup_idx(&blob, stack, out);
+        state._lookup_idx(&blob, stack, out);
     }
 }
 

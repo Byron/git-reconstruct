@@ -11,7 +11,6 @@ extern crate walkdir;
 #[macro_use]
 extern crate serde_derive;
 extern crate bincode;
-extern crate lz4;
 extern crate serde;
 
 use failure_tools::ok_or_exit;

@@ -229,7 +229,7 @@ pub fn build(opts: &Options) -> Result<ReverseGraph, Error> {
         );
     }
     graph.compact();
-    progress.finish_and_clear();
+    progress.finish();
 
     eprintln!(
         "READY: Build reverse-tree from {} commits with graph with {} vertices and {} parent-edges",

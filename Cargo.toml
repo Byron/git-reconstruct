@@ -17,7 +17,6 @@ fixedbitset = "0.1.9"
 serde_derive = "1.0.66"
 bincode = "1.0.0"
 serde = "1.0.66"
-lz4 = "1.22.0"
 
 [profile.release]
 lto = false

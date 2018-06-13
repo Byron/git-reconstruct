@@ -7,7 +7,6 @@ use {Options, Stack};
 use find;
 use indicatif::ProgressBar;
 use lut::{ReverseGraph, StorableReverseGraph};
-use lz4;
 
 const PROGRESS_RATE: usize = 25;
 
@@ -68,18 +67,14 @@ pub fn run(opts: Options) -> Result<(), Error> {
     let graph = match &opts.cache_path {
         Some(cache_path) => {
             if metadata(cache_path).is_ok() {
-                StorableReverseGraph::load(lz4::Decoder::new(BufReader::new(File::open(
-                    &cache_path,
-                )?))?)?.into_memory()
+                StorableReverseGraph::load(BufReader::new(File::open(&cache_path)?))?.into_memory()
             } else {
                 lut::build(&opts)?
                     .into_storage()
-                    .save(
-                        lz4::EncoderBuilder::new().build(BufWriter::new(OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .open(&cache_path)?))?,
-                    )?
+                    .save(BufWriter::new(OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .open(&cache_path)?))?
                     .into_memory()
             }
         }

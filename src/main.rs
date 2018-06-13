@@ -91,9 +91,9 @@ mod find {
         }
 
         let mut commit_indices_to_blobs = vec![FixedBitSet::with_capacity(0); graph.len()];
+        let mut total_commits = 0;
         {
             let mut commits = Vec::new();
-            let mut total_commits = 0;
             let mut stack = Stack::default();
             for (bid, blob) in blobs.iter().enumerate() {
                 graph.lookup_idx(&blob, &mut stack, &mut commits);
@@ -118,6 +118,11 @@ mod find {
             drop(graph);
         }
         progress.finish_and_clear();
+        eprintln!(
+            "Ticked {} blob bits in {} commits",
+            blobs.len(),
+            total_commits
+        );
         unimplemented!();
     }
 }

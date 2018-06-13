@@ -1,7 +1,7 @@
 use failure::Error;
 use std::collections::{BTreeMap, btree_map::Entry};
 use git2::{ObjectType, Oid, Repository, Revwalk, Tree};
-use indicatif::{MultiProgress, ProgressBar};
+use indicatif::ProgressBar;
 use Stack;
 use Options;
 use git2;
@@ -96,22 +96,15 @@ impl ReverseGraph {
 pub fn build(opts: Options) -> Result<ReverseGraph, Error> {
     let repo = Repository::open(&opts.repository)?;
 
-    let commits: Vec<_> = {
-        let mut walk = repo.revwalk()?;
-        walk.set_sorting(git2::Sort::TOPOLOGICAL);
-        setup_walk(&repo, &mut walk, opts.head_only)?;
-        walk.filter_map(Result::ok).collect()
-    };
+    let mut walk = repo.revwalk()?;
+    walk.set_sorting(git2::Sort::TOPOLOGICAL);
+    setup_walk(&repo, &mut walk, opts.head_only)?;
 
-    let multiprogress = MultiProgress::new();
-
+    let progress = ProgressBar::new_spinner();
     let mut graph = ReverseGraph::default();
     let (mut num_commits, mut edges_total) = (0, 0);
 
-    let progress = multiprogress.add(ProgressBar::new_spinner());
-    let repo = Repository::open(&opts.repository).expect("successful repository initialization");
-
-    for commit_oid in commits {
+    for commit_oid in walk.filter_map(Result::ok) {
         num_commits += 1;
         if let Ok(object) = repo.find_object(commit_oid, Some(ObjectType::Commit)) {
             let commit = object.into_commit().expect("to have commit");

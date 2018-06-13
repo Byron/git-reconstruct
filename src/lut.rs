@@ -49,11 +49,12 @@ impl ReverseGraph {
             }
         }
     }
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.vertices_to_oid.len()
     }
     // TODO: dedup
-    pub fn _lookup_idx(&self, blob: &Oid, stack: &mut Stack, out: &mut Vec<usize>) {
+    pub fn lookup_idx(&self, blob: &Oid, stack: &mut Stack, out: &mut Vec<usize>) {
+        out.clear();
         match self.oids_to_vertices.get(blob) {
             None => {}
             Some(idx) => {
@@ -72,6 +73,7 @@ impl ReverseGraph {
         }
     }
     pub fn lookup(&self, blob: &Oid, stack: &mut Stack, out: &mut Vec<Oid>) {
+        out.clear();
         match self.oids_to_vertices.get(blob) {
             None => {}
             Some(idx) => {

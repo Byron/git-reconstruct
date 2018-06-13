@@ -57,7 +57,7 @@ pub struct Options {
 mod find {
     use fixedbitset::FixedBitSet;
     use failure::{Error, ResultExt};
-    use std::{collections::BTreeMap, path::Path};
+    use std::path::Path;
     use git2::Oid;
     use walkdir::WalkDir;
     use git2::ObjectType;
@@ -90,20 +90,21 @@ mod find {
             }
         }
 
-        let mut commit_to_blobs = BTreeMap::new();
+        let mut commit_indices_to_blobs = vec![FixedBitSet::with_capacity(0); graph.len()];
         {
             let mut commits = Vec::new();
             let mut total_commits = 0;
             let mut stack = Stack::default();
             for (bid, blob) in blobs.iter().enumerate() {
-                graph.lookup(&blob, &mut stack, &mut commits);
+                graph.lookup_idx(&blob, &mut stack, &mut commits);
                 total_commits += commits.len();
 
-                for commit in &commits {
-                    commit_to_blobs
-                        .entry(commit.clone())
-                        .or_insert_with(|| FixedBitSet::with_capacity(blobs.len()))
-                        .put(bid);
+                for &commit_index in &commits {
+                    let bits = &mut commit_indices_to_blobs[commit_index];
+                    if bits.len() == 0 {
+                        bits.grow(blobs.len());
+                    }
+                    bits.put(bid);
                 }
 
                 progress.set_message(&format!(

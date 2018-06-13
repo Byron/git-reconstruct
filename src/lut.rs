@@ -103,6 +103,7 @@ pub fn commits_by_blob(
     stack: &mut Stack,
     out: &mut Vec<Oid>,
 ) {
+    out.clear();
     for (lut, all_oids) in luts.iter().zip(all_oids) {
         lookup_oid(&blob, lut, all_oids, stack, out)
     }
@@ -118,7 +119,6 @@ fn lookup_oid(
     match lut.get(blob) {
         None => {}
         Some(Capsule::Compact(parent_indices)) => {
-            out.clear();
             let indices_to_traverse = &mut stack.indices;
             indices_to_traverse.clear();
             indices_to_traverse.extend(parent_indices);

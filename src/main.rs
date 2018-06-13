@@ -59,7 +59,6 @@ mod find {
     use failure::{Error, ResultExt};
     use std::{collections::BTreeMap, path::Path};
     use git2::Oid;
-    use lut;
     use walkdir::WalkDir;
     use git2::ObjectType;
     use indicatif::ProgressBar;
@@ -68,7 +67,7 @@ mod find {
 
     const HASHING_PROGRESS_RATE: usize = 25;
 
-    pub fn commit(tree: &Path, graphs: Vec<ReverseGraph>) -> Result<(), Error> {
+    pub fn commit(tree: &Path, graph: ReverseGraph) -> Result<(), Error> {
         let progress = ProgressBar::new_spinner();
         let mut blobs = Vec::new();
         for (eid, entry) in WalkDir::new(tree)
@@ -97,7 +96,7 @@ mod find {
             let mut total_commits = 0;
             let mut stack = Stack::default();
             for (bid, blob) in blobs.iter().enumerate() {
-                lut::commits_by_blob(&blob, &graphs, &mut stack, &mut commits);
+                graph.lookup(&blob, &mut stack, &mut commits);
                 total_commits += commits.len();
 
                 for commit in &commits {
@@ -115,7 +114,7 @@ mod find {
                 ));
                 progress.tick();
             }
-            drop(graphs);
+            drop(graph);
         }
         progress.finish_and_clear();
         unimplemented!();

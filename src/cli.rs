@@ -9,7 +9,7 @@ use lut::ReverseGraph;
 
 const PROGRESS_RATE: usize = 25;
 
-fn deplete_requests_from_stdin(graphs: &[ReverseGraph]) -> Result<(), Error> {
+fn deplete_requests_from_stdin(graph: ReverseGraph) -> Result<(), Error> {
     let mut commits = Vec::new();
 
     let stdin = stdin();
@@ -28,7 +28,7 @@ fn deplete_requests_from_stdin(graphs: &[ReverseGraph]) -> Result<(), Error> {
         num_blobs += 1;
         let oid = Oid::from_str(&hexsha)?;
 
-        lut::commits_by_blob(&oid, graphs, &mut stack, &mut commits);
+        graph.lookup(&oid, &mut stack, &mut commits);
         total_commits += commits.len();
 
         obuf.clear();
@@ -63,9 +63,9 @@ fn deplete_requests_from_stdin(graphs: &[ReverseGraph]) -> Result<(), Error> {
 
 pub fn run(opts: Options) -> Result<(), Error> {
     let tree = opts.tree.clone();
-    let graphs = lut::build(opts)?;
+    let graph = lut::build(opts)?;
     match tree {
-        None => deplete_requests_from_stdin(&graphs),
-        Some(tree) => find::commit(&tree, graphs),
+        None => deplete_requests_from_stdin(graph),
+        Some(tree) => find::commit(&tree, graph),
     }
 }

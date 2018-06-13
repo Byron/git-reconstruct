@@ -1,11 +1,13 @@
 use failure::Error;
 use lut;
-use std::{fs::{metadata, File, OpenOptions}, io::{stdin, stdout, BufRead, BufReader, Write}};
+use std::{fs::{metadata, File, OpenOptions},
+          io::{stdin, stdout, BufRead, BufReader, BufWriter, Write}};
 use git2::Oid;
 use {Options, Stack};
 use find;
 use indicatif::ProgressBar;
 use lut::{ReverseGraph, StorableReverseGraph};
+use lz4;
 
 const PROGRESS_RATE: usize = 25;
 
@@ -66,14 +68,18 @@ pub fn run(opts: Options) -> Result<(), Error> {
     let graph = match &opts.cache_path {
         Some(cache_path) => {
             if metadata(cache_path).is_ok() {
-                StorableReverseGraph::load(File::open(&cache_path)?)?.into_memory()
+                StorableReverseGraph::load(lz4::Decoder::new(BufReader::new(File::open(
+                    &cache_path,
+                )?))?)?.into_memory()
             } else {
                 lut::build(&opts)?
                     .into_storage()
-                    .save(OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .open(&cache_path)?)?
+                    .save(
+                        lz4::EncoderBuilder::new().build(BufWriter::new(OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .open(&cache_path)?))?,
+                    )?
                     .into_memory()
             }
         }

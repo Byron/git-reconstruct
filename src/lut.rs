@@ -9,7 +9,6 @@ use bincode::{deserialize_from, serialize_into};
 use std::io;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
-const COMPACTION_PROGRESS_RATE: usize = 10000;
 
 #[derive(Default)]
 pub struct ReverseGraph {
@@ -120,14 +119,9 @@ impl ReverseGraph {
 
         removed
     }
-    fn compact(&mut self, progress: &ProgressBar) {
-        let own_len = self.vertices_to_edges.len();
-        for (eid, mut edges) in &mut self.vertices_to_edges.iter_mut().enumerate() {
+    fn compact(&mut self) {
+        for mut edges in &mut self.vertices_to_edges {
             edges.shrink_to_fit();
-            if eid % COMPACTION_PROGRESS_RATE == 0 {
-                progress.set_message(&format!("Compacted {} of {} edges...", eid, own_len,));
-                progress.tick();
-            }
         }
     }
     fn append(&mut self, oid: Oid) -> usize {
@@ -234,7 +228,7 @@ pub fn build(opts: &Options) -> Result<ReverseGraph, Error> {
             total_removed, passes
         );
     }
-    graph.compact(&progress);
+    graph.compact();
     progress.finish_and_clear();
 
     eprintln!(

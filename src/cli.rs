@@ -72,15 +72,14 @@ pub fn run(opts: Options) -> Result<(), Error> {
                     &cache_path,
                 )?))?)?.into_memory()
             } else {
-                lut::build(&opts)?
-                    .into_storage()
-                    .save(
-                        lz4::EncoderBuilder::new().build(BufWriter::new(OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .open(&cache_path)?))?,
-                    )?
-                    .into_memory()
+                let mut encoder =
+                    lz4::EncoderBuilder::new().build(BufWriter::new(OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .open(&cache_path)?))?;
+                let storage = lut::build(&opts)?.into_storage().save(&mut encoder)?;
+                encoder.finish();
+                storage.into_memory()
             }
         }
         None => lut::build(&opts)?,

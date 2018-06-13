@@ -23,7 +23,7 @@ title "backend mode - lookup commits by blob"
   )
   (when "compaction"
     it "succeeds" && {
-      WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-success" \
+      # WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-success" \
       expect_run ${SUCCESSFULLY} "$exe" --head-only $PWD "$fixture/tree"
     }
   )

@@ -10,90 +10,57 @@ use crossbeam;
 
 const COMMIT_PROGRESS_RATE: usize = 100;
 const COMPACTION_PROGRESS_RATE: usize = 10000;
-const BLOB_COMPACTION_PROGRESS_RATE: usize = 25;
 
 pub type MultiReverseCommitGraph = Vec<BTreeMap<Oid, Capsule>>;
+#[derive(Default)]
+pub struct ReverseGraph {
+    vertices_to_oid: Vec<Oid>,
+    vertices_to_edges: Vec<Vec<usize>>,
+    oids_to_vertices: BTreeMap<Oid, usize>,
+}
+
+impl ReverseGraph {
+    fn compact(&mut self, progress: &ProgressBar) {
+        let own_len = self.vertices_to_edges.len();
+        for (eid, mut edges) in &mut self.vertices_to_edges.iter_mut().enumerate() {
+            edges.shrink_to_fit();
+            if eid % COMPACTION_PROGRESS_RATE == 0 {
+                progress.set_message(&format!("Compacted {} of {} edges...", eid, own_len,));
+                progress.tick();
+            }
+        }
+    }
+    fn append(&mut self, oid: Oid) -> usize {
+        let idx = self.vertices_to_oid.len();
+        self.vertices_to_oid.push(oid.clone());
+        self.oids_to_vertices.insert(oid, idx);
+        self.vertices_to_edges.push(Vec::new());
+        idx
+    }
+    fn insert_parent_get_new_child_id(&mut self, parent: usize, child: Oid) -> Option<usize> {
+        match self.oids_to_vertices.entry(child) {
+            Entry::Occupied(entry) => {
+                self.vertices_to_edges[*entry.get()].push(parent);
+                None
+            }
+            Entry::Vacant(entry) => {
+                let child_idx = self.vertices_to_oid.len();
+                self.vertices_to_oid.push(entry.key().clone());
+                entry.insert(child_idx);
+                self.vertices_to_edges.push(vec![parent]);
+                Some(child_idx)
+            }
+        }
+    }
+    fn len(&self) -> usize {
+        self.vertices_to_oid.len()
+    }
+}
 
 pub fn commit_oids_table(luts: &MultiReverseCommitGraph) -> Vec<Vec<Oid>> {
     luts.iter()
         .map(|lut| lut.keys().cloned().collect())
         .collect()
-}
-
-pub fn compact_by_blobs(
-    blobs: &Vec<Oid>,
-    luts: MultiReverseCommitGraph,
-) -> (MultiReverseCommitGraph, Vec<Vec<Oid>>) {
-    // TODO Performance: can easily be threaded
-    let progress = ProgressBar::new_spinner();
-    let mut nluts = MultiReverseCommitGraph::new();
-    let luts_len = luts.len();
-    for (lid, lut) in luts.into_iter().enumerate() {
-        let mut nlut = BTreeMap::<Oid, Capsule>::new();
-        let all_oids: Vec<_> = lut.keys().cloned().collect();
-        let mut stack = Stack::default();
-
-        for (bid, blob) in blobs.iter().enumerate() {
-            match lut.get(blob) {
-                None => {}
-                Some(Capsule::Normal(parent_oids)) => {
-                    let oids_to_traverse = &mut stack.oids;
-                    oids_to_traverse.clear();
-                    nlut.insert(blob.clone(), Capsule::Normal(parent_oids.clone()));
-                    oids_to_traverse.extend(parent_oids);
-                    while let Some(oid) = oids_to_traverse.pop() {
-                        match lut.get(&oid) {
-                            Some(Capsule::Normal(parent_oids)) => {
-                                nlut.insert(oid.clone(), Capsule::Normal(parent_oids.clone()));
-                                oids_to_traverse.extend(parent_oids)
-                            }
-                            Some(Capsule::Compact(_)) => {
-                                unreachable!("LUT must be completely uncompacted in this branch")
-                            }
-                            None => unreachable!("Every item we see must be in the LUT"),
-                        }
-                    }
-                }
-                Some(Capsule::Compact(parent_indices)) => {
-                    let indices_to_traverse = &mut stack.indices;
-                    indices_to_traverse.clear();
-                    nlut.insert(blob.clone(), Capsule::Compact(parent_indices.clone()));
-                    indices_to_traverse.extend(parent_indices);
-                    while let Some(idx) = indices_to_traverse.pop() {
-                        let oid = all_oids[idx];
-                        match lut.get(&oid) {
-                            Some(Capsule::Compact(parent_indices)) => {
-                                nlut.insert(
-                                    oid.clone(),
-                                    Capsule::Compact(parent_indices.clone()),
-                                );
-                                indices_to_traverse.extend(parent_indices)
-                            }
-                            Some(Capsule::Normal(_)) => {
-                                unreachable!("LUT must be completely compacted in this branch")
-                            }
-                            None => unreachable!("Every item we see must be in the LUT"),
-                        }
-                    }
-                }
-            }
-            if bid % BLOB_COMPACTION_PROGRESS_RATE == 0 {
-                progress.set_message(&format!(
-                    "{}/{}: LUT compaction done for {} of {} blobs",
-                    lid,
-                    luts_len,
-                    bid,
-                    blobs.len()
-                ));
-                progress.tick();
-            }
-        }
-        nluts.push(nlut);
-    }
-    progress.finish_and_clear();
-
-    let all_oids = commit_oids_table(&nluts);
-    (nluts, all_oids)
 }
 
 pub fn commits_by_blob(
@@ -159,6 +126,86 @@ fn lookup_oid(
             }
         }
     }
+}
+
+pub fn build2(opts: Options) -> Result<Vec<ReverseGraph>, Error> {
+    let repo = Repository::open(&opts.repository)?;
+
+    let commits: Vec<_> = {
+        let mut walk = repo.revwalk()?;
+        walk.set_sorting(git2::Sort::TOPOLOGICAL);
+        setup_walk(&repo, &mut walk, opts.head_only)?;
+        walk.filter_map(Result::ok).collect()
+    };
+
+    let multiprogress = MultiProgress::new();
+
+    let num_threads = opts.threads.unwrap_or_else(num_cpus::get_physical);
+    let mut graphs = Vec::new();
+    let mut edges_total = 0;
+
+    crossbeam::scope(|scope| {
+        let mut guards = Vec::with_capacity(num_threads);
+        for (chunk_idx, chunk_of_commits) in commits.chunks(commits.len() / num_threads).enumerate()
+        {
+            let progress = multiprogress.add(ProgressBar::new_spinner());
+            let repo =
+                Repository::open(&opts.repository).expect("successful repository initialization");
+            let compact = !opts.no_compact;
+            let mut state = ReverseGraph::default();
+
+            let guard = scope.spawn(move || {
+                let (mut num_commits, mut num_edges) = (0, 0);
+                for &commit_oid in chunk_of_commits {
+                    num_commits += 1;
+                    if let Ok(object) = repo.find_object(commit_oid, Some(ObjectType::Commit)) {
+                        let commit = object.into_commit().expect("to have commit");
+                        let tree = commit.tree().expect("commit to have tree");
+                        let commit_idx = state.append(commit_oid);
+                        if let Some(tree_idx) =
+                            state.insert_parent_get_new_child_id(commit_idx, tree.id())
+                        {
+                            num_edges += recurse_tree2(&repo, tree, tree_idx, &mut state);
+                        }
+                    }
+                    if num_commits % COMMIT_PROGRESS_RATE == 0 {
+                        progress.set_message(&format!(
+                                "{} Commits done; reverse-tree with {} entries and a total of {} parent-edges",
+                                num_commits,
+                                state.len(),
+                                num_edges
+                            ));
+                        progress.tick();
+                    }
+                }
+                if compact {
+                    state.compact(&progress);
+                } else {
+                    eprintln!("INFO: Not compacting memory will safe about 1/3 of used time, at the cost of about 35% more memory")
+                }
+                progress.finish_and_clear();
+                (state, num_edges, chunk_idx)
+            });
+            guards.push(guard);
+        }
+        multiprogress.join_and_clear().ok();
+        for guard in guards {
+            let (state, edges, chunk_idx) = guard.join();
+            graphs.push((chunk_idx, state));
+            edges_total += edges;
+        }
+    });
+
+    graphs.sort_by_key(|(chunk_idx, _)| *chunk_idx);
+    let graphs: Vec<_> = graphs.drain(..).map(|(_, lut)| lut).collect();
+
+    eprintln!(
+        "READY: Build reverse-tree from {} commits with table of {} entries and {} parent-edges",
+        commits.len(),
+        graphs.iter().map(|s| s.len()).sum::<usize>(),
+        edges_total
+    );
+    Ok(graphs)
 }
 
 pub fn build(opts: Options) -> Result<MultiReverseCommitGraph, Error> {
@@ -256,6 +303,39 @@ fn insert_parent_and_has_not_seen_child(
             true
         }
     }
+}
+
+fn recurse_tree2(
+    repo: &Repository,
+    tree: Tree,
+    tree_idx: usize,
+    state: &mut ReverseGraph,
+) -> usize {
+    use ObjectType::*;
+    let mut refs = 0;
+    for item in tree.iter() {
+        match item.kind() {
+            Some(Tree) => {
+                if let Some(item_idx) = state.insert_parent_get_new_child_id(tree_idx, item.id()) {
+                    refs += recurse_tree2(
+                        repo,
+                        item.to_object(repo)
+                            .expect("valid object")
+                            .into_tree()
+                            .expect("tree"),
+                        item_idx,
+                        state,
+                    )
+                }
+            }
+            Some(Blob) => {
+                refs += 1;
+                state.insert_parent_get_new_child_id(tree_idx, item.id());
+            }
+            _ => continue,
+        }
+    }
+    refs
 }
 
 fn recurse_tree(repo: &Repository, tree: Tree, lut: &mut BTreeMap<Oid, Capsule>) -> usize {

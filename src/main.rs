@@ -109,10 +109,10 @@ mod find {
         // anything faster, and if not, those who have no memory anyway can't afford the spike
         // If there is a good way, it could be valuable, as 55k is way less than 1832k!
         // Given the numbers, the spike might not be that huge!
+        // TOO SLOW right now
         let mut commit_to_blobs = BTreeMap::new();
         {
-                        let (luts, all_oids) = lut::compact_by_blobs(&blobs, luts);
-//            let all_oids = lut::commit_oids_table(&luts);
+            let all_oids = lut::commit_oids_table(&luts);
             let mut commits = Vec::new();
             let mut total_commits = 0;
             let mut stack = Stack::default();

@@ -57,9 +57,11 @@ fn deplete_requests_from_stdin(luts: &MultiReverseCommitGraph) -> Result<(), Err
 
 pub fn run(opts: Options) -> Result<(), Error> {
     let tree = opts.tree.clone();
-    let luts = lut::build(opts)?;
-    match tree {
-        None => deplete_requests_from_stdin(&luts),
-        Some(tree) => find::commit(&tree, luts),
-    }
+    let luts = lut::build2(opts)?;
+    Ok(())
+    //    let luts = lut::build(opts)?;
+    //    match tree {
+    //        None => deplete_requests_from_stdin(&luts),
+    //        Some(tree) => find::commit(&tree, luts),
+    //    }
 }

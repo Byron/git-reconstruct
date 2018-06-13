@@ -77,12 +77,12 @@ impl ReverseGraph {
                 .collect(),
         }
     }
-    fn optimize_topology(&mut self, progress: &ProgressBar) -> Option<(usize, usize)> {
+    fn _optimize_topology(&mut self, progress: &ProgressBar) -> Option<(usize, usize)> {
         let mut total_removed = 0;
         let mut last_pass = 0;
         for pass in 1.. {
             last_pass = pass;
-            let edges_removed = self.optimize_topology_once();
+            let edges_removed = self._optimize_topology_once();
             if edges_removed == 0 {
                 break;
             }
@@ -97,7 +97,7 @@ impl ReverseGraph {
         }
     }
 
-    fn optimize_topology_once(&mut self) -> usize {
+    fn _optimize_topology_once(&mut self) -> usize {
         let mut parents_to_adjust = Vec::new();
 
         for vtx in 0..self.len() {
@@ -220,13 +220,6 @@ pub fn build(opts: &Options) -> Result<ReverseGraph, Error> {
             ));
             progress.tick();
         }
-    }
-    if let Some((passes, total_removed)) = graph.optimize_topology(&progress) {
-        edges_total -= total_removed;
-        eprintln!(
-            "Removed {} unnecessary edges in {} passes",
-            total_removed, passes
-        );
     }
     graph.compact();
     progress.finish_and_clear();

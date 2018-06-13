@@ -60,11 +60,11 @@ impl ReverseGraph {
             Some(idx) => {
                 let indices_to_traverse = &mut stack.indices;
                 indices_to_traverse.clear();
-                indices_to_traverse.extend(&self.vertices_to_edges[*idx]);
+                indices_to_traverse.extend(unsafe { self.vertices_to_edges.get_unchecked(*idx) });
                 while let Some(idx) = indices_to_traverse.pop() {
-                    let parent_indices = &self.vertices_to_edges[idx];
+                    let parent_indices = unsafe { self.vertices_to_edges.get_unchecked(idx) };
                     if parent_indices.is_empty() {
-                        out.push(self.vertices_to_oid[idx]);
+                        out.push(unsafe { *self.vertices_to_oid.get_unchecked(idx) });
                     } else {
                         indices_to_traverse.extend(parent_indices)
                     }

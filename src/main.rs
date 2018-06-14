@@ -80,10 +80,11 @@ mod find {
     use crossbeam;
     use num_cpus;
     use git2::Oid;
+    use Options;
 
     const HASHING_PROGRESS_RATE: usize = 25;
 
-    pub fn commit(tree: &Path, graph: ReverseGraph) -> Result<(), Error> {
+    pub fn commit(tree: &Path, graph: ReverseGraph, opts: &Options) -> Result<(), Error> {
         let progress = ProgressBar::new_spinner();
         let mut blobs = Vec::new();
         for (eid, entry) in WalkDir::new(tree)
@@ -107,7 +108,7 @@ mod find {
         }
 
         let mut commit_indices_to_blobs = vec![FixedBitSet::with_capacity(0); graph.len()];
-        let num_threads = num_cpus::get_physical();
+        let num_threads = opts.threads.unwrap_or(num_cpus::get_physical());
         crossbeam::scope(|scope| {
             let or = {
                 let (is, ir) = crossbeam_channel::bounded::<(usize, Oid)>(num_threads);

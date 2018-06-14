@@ -86,6 +86,6 @@ pub fn run(opts: Options) -> Result<(), Error> {
     };
     match tree {
         None => deplete_requests_from_stdin(graph),
-        Some(tree) => find::commit(&tree, graph),
+        Some(tree) => find::commit(&tree, graph, &opts),
     }
 }

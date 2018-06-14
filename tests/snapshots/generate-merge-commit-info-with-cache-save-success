@@ -1,5 +1,5 @@
-Removed 222 unnecessary edges in 2 passes
-READY: Build reverse-tree from 77 commits with graph with 389 vertices and 347 parent-edges
+Removed 10 edges in 3 passes
+READY: Build reverse-tree from 83 commits with graph with 425 vertices and 609 parent-edges
 Saving graph...
-Ticked 2 blob bits in 96 commits
+Ticked 2 blob bits in 114 commits
 unimplemented

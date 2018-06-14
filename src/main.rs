@@ -11,6 +11,7 @@ extern crate walkdir;
 #[macro_use]
 extern crate serde_derive;
 extern crate bincode;
+extern crate crossbeam_channel;
 extern crate lz4;
 extern crate serde;
 
@@ -70,12 +71,15 @@ mod find {
     use fixedbitset::FixedBitSet;
     use failure::{Error, ResultExt};
     use std::path::Path;
-    use git2::Oid;
     use walkdir::WalkDir;
     use git2::ObjectType;
     use indicatif::ProgressBar;
     use Stack;
     use lut::ReverseGraph;
+    use crossbeam_channel;
+    use crossbeam;
+    use num_cpus;
+    use git2::Oid;
 
     const HASHING_PROGRESS_RATE: usize = 25;
 
@@ -103,14 +107,34 @@ mod find {
         }
 
         let mut commit_indices_to_blobs = vec![FixedBitSet::with_capacity(0); graph.len()];
-        let mut total_commits = 0;
-        {
-            let mut commits = Vec::new();
-            let mut stack = Stack::default();
-            for (bid, blob) in blobs.iter().enumerate() {
-                graph.lookup_idx(&blob, &mut stack, &mut commits);
-                total_commits += commits.len();
+        let num_threads = num_cpus::get_physical();
+        crossbeam::scope(|scope| {
+            let (is, ir) = crossbeam_channel::bounded::<(usize, Oid)>(num_threads);
+            let (os, or) = crossbeam_channel::bounded::<(usize, Vec<usize>)>(num_threads);
+            let blobs = &blobs;
+            scope.spawn(move || {
+                for bid_and_blob in blobs.iter().cloned().enumerate() {
+                    is.send(bid_and_blob);
+                }
+            });
+            for _ in 0..num_threads {
+                let graph = &graph;
+                let ir = ir.clone();
+                let os = os.clone();
+                scope.spawn(move || {
+                    let mut stack = Stack::default();
+                    for (bid, blob) in ir {
+                        let mut commits = Vec::new();
+                        graph.lookup_idx(&blob, &mut stack, &mut commits);
+                        os.send((bid, commits));
+                    }
+                });
+            }
+            drop(ir);
+            drop(os);
 
+            let mut total_commits = 0;
+            for (bid, commits) in or {
                 for &commit_index in &commits {
                     let bits = unsafe { commit_indices_to_blobs.get_unchecked_mut(commit_index) };
                     if bits.len() == 0 {
@@ -118,7 +142,7 @@ mod find {
                     }
                     bits.put(bid);
                 }
-
+                total_commits += commits.len();
                 progress.set_message(&format!(
                     "{}/{}: Ticking blob bits, saw {} commits so far...",
                     bid,
@@ -127,14 +151,15 @@ mod find {
                 ));
                 progress.tick();
             }
-            drop(graph);
-        }
-        progress.finish_and_clear();
-        eprintln!(
-            "Ticked {} blob bits in {} commits",
-            blobs.len(),
-            total_commits
-        );
+            progress.finish_and_clear();
+            eprintln!(
+                "Ticked {} blob bits in {} commits",
+                blobs.len(),
+                total_commits
+            );
+        });
+        drop(graph);
+
         eprintln!("unimplemented");
         Ok(())
     }

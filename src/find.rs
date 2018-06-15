@@ -15,10 +15,16 @@ use Options;
 const HASHING_PROGRESS_RATE: usize = 25;
 
 fn compact(c: Vec<FixedBitSet>, graph: ReverseGraph) -> Vec<(Oid, FixedBitSet)> {
-    let mut nc = Vec::new();
-    for (cid, bits) in c.into_iter().enumerate().filter(|(_, b)| b.len() > 0) {
-        nc.push((graph.oid_of(cid), bits));
-    }
+    let mut nc: Vec<_> = c.into_iter()
+        .enumerate()
+        .filter_map(|(cid, bits)| {
+            if bits.len() > 0 {
+                Some((graph.oid_of(cid), bits))
+            } else {
+                None
+            }
+        })
+        .collect();
     nc.shrink_to_fit();
     nc
 }

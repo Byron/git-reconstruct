@@ -14,6 +14,15 @@ use Options;
 
 const HASHING_PROGRESS_RATE: usize = 25;
 
+fn compact(c: Vec<FixedBitSet>, graph: ReverseGraph) -> Vec<(Oid, FixedBitSet)> {
+    let mut nc = Vec::new();
+    for (cid, bits) in c.into_iter().enumerate() {
+        nc.push((graph.oid_of(cid), bits));
+    }
+    nc.shrink_to_fit();
+    nc
+}
+
 pub fn commit(tree: &Path, graph: ReverseGraph, opts: &Options) -> Result<(), Error> {
     let progress = ProgressBar::new_spinner();
     let mut blobs = Vec::new();
@@ -90,7 +99,7 @@ pub fn commit(tree: &Path, graph: ReverseGraph, opts: &Options) -> Result<(), Er
             total_commits
         );
     });
-    drop(graph);
+    let _commit_indices_to_blobs = compact(commit_indices_to_blobs, graph);
 
     eprintln!("unimplemented");
     Ok(())

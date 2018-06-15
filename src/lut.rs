@@ -67,6 +67,10 @@ impl StorableReverseGraph {
 }
 
 impl ReverseGraph {
+    #[inline]
+    pub fn oid_of(&self, idx: usize) -> Oid {
+        self.vertices_to_oid[idx]
+    }
     pub fn into_storage(self) -> StorableReverseGraph {
         StorableReverseGraph {
             vertices_to_oid: self.vertices_to_oid.into_iter().map(Into::into).collect(),

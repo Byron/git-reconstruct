@@ -19,7 +19,6 @@ title "Frontend mode - find merge commit"
     cache_file=cache.bincode
     (sandbox
       it "succeeds" && {
-        WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-with-cache-save-success" \
         expect_run ${SUCCESSFULLY} "$exe" --head-only --cache-path $cache_file "$root/.." "$fixture/tree"
       }
       it "writes the cache" && {
@@ -28,7 +27,6 @@ title "Frontend mode - find merge commit"
       
       (when "finding the best commit with existing cache" 
         it "loads the cache and succeeds" && {
-          WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-with-cache-load-success" \
           expect_run ${SUCCESSFULLY} "$exe" --head-only --cache-path $cache_file "$root/.." "$fixture/tree"
         }
       )
@@ -36,7 +34,6 @@ title "Frontend mode - find merge commit"
   )
   (with "no cache specified"
     it "succeeds" && {
-      WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-success" \
       expect_run ${SUCCESSFULLY} "$exe" --head-only "$PWD" "$fixture/tree"
     }
   )

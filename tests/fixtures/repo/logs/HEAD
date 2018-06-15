@@ -1,0 +1,47 @@
+0000000000000000000000000000000000000000 d71c656fa9dcf7beae7605ff8e4744c94f19632e Sebastian Thiel <sthiel@thoughtworks.com> 1528838349 +0200	clone: from /Users/sthiel/dev/git-commits-by-blob
+d71c656fa9dcf7beae7605ff8e4744c94f19632e ffc7656c7a586605a8b5db8b5c04380dde53d4bd Sebastian Thiel <sthiel@thoughtworks.com> 1528838622 +0200	commit: Setup new tool based on 'old one'
+ffc7656c7a586605a8b5db8b5c04380dde53d4bd 5e8393bb92167d3a4b78bce68bed25fdff845f35 Sebastian Thiel <sthiel@thoughtworks.com> 1528841355 +0200	commit: Remove everything that is not required, and radically rethink traversal
+5e8393bb92167d3a4b78bce68bed25fdff845f35 2a64ead45a4522e2daec5754c3b83010ee540bfa Sebastian Thiel <sthiel@thoughtworks.com> 1528865614 +0200	revert: Revert "Remove everything that is not required, and radically rethink traversal"
+2a64ead45a4522e2daec5754c3b83010ee540bfa 269888e4008ce2138c22e23faa7bfb782ca91a4d Sebastian Thiel <sthiel@thoughtworks.com> 1528867283 +0200	commit: Fix regression
+269888e4008ce2138c22e23faa7bfb782ca91a4d 59a72a0ccb285556216b222f8669455dca48081e Sebastian Thiel <sthiel@thoughtworks.com> 1528871570 +0200	commit: First compiling version of new state
+59a72a0ccb285556216b222f8669455dca48081e 46242f8d63dd4e663718f6afdcb39f156e19824e Sebastian Thiel <sthiel@thoughtworks.com> 1528871870 +0200	commit (amend): First compiling version of new state
+46242f8d63dd4e663718f6afdcb39f156e19824e 0401f8439d2fe2df71b9b0f2ef234f961121c277 Sebastian Thiel <sthiel@thoughtworks.com> 1528873191 +0200	commit: implement lookup in new structure
+0401f8439d2fe2df71b9b0f2ef234f961121c277 d5d69419322c8dc3dbfa55d946e5357dd964d9fb Sebastian Thiel <sthiel@thoughtworks.com> 1528874896 +0200	commit: unchecked array access where we can afford it
+d5d69419322c8dc3dbfa55d946e5357dd964d9fb 1985ef92c75e10f3c39261a22ecfa1b92abfbc06 Sebastian Thiel <sthiel@thoughtworks.com> 1528874908 +0200	commit: fix journey tests
+1985ef92c75e10f3c39261a22ecfa1b92abfbc06 6171a946bd5725dd85afc2cd5ee845940064af93 Sebastian Thiel <sthiel@thoughtworks.com> 1528874972 +0200	commit: even more unchecked access when building the lut
+6171a946bd5725dd85afc2cd5ee845940064af93 04b0cbb3895eaa7aafdfd56c763b7b208eceeaec Sebastian Thiel <sthiel@thoughtworks.com> 1528875156 +0200	commit: better progress at end of lookup
+04b0cbb3895eaa7aafdfd56c763b7b208eceeaec a042f3640dd1396b35ce9e60f8aa203e17a51303 Sebastian Thiel <sthiel@thoughtworks.com> 1528876775 +0200	commit: Prepare for better commit-to-bitmap lookup
+a042f3640dd1396b35ce9e60f8aa203e17a51303 b3ec9d264e6fe385ec2a3d1de7341efba77b5516 Sebastian Thiel <sthiel@thoughtworks.com> 1528876836 +0200	commit: fix wraningss
+b3ec9d264e6fe385ec2a3d1de7341efba77b5516 7e251048b8b0bb10dd1dd547a3fb30bfbde6ffe4 Sebastian Thiel <sthiel@thoughtworks.com> 1528879586 +0200	commit: Remove threading from graph generation
+7e251048b8b0bb10dd1dd547a3fb30bfbde6ffe4 e3bb7dafc302a3ae2eea9e7902946b89ea7259b5 Sebastian Thiel <sthiel@thoughtworks.com> 1528880034 +0200	commit: Lookup with indices
+e3bb7dafc302a3ae2eea9e7902946b89ea7259b5 821b158397046186a01142db97eace3c39856172 Sebastian Thiel <sthiel@thoughtworks.com> 1528880159 +0200	commit: Don't preallocate commits anymore
+821b158397046186a01142db97eace3c39856172 ab53aa1321d036aa65e539e63ae07a1214aae4bc Sebastian Thiel <sthiel@thoughtworks.com> 1528880275 +0200	commit (amend): Don't preallocate commits anymore
+ab53aa1321d036aa65e539e63ae07a1214aae4bc b1aaad196da7edf38f751127ef616fc940d866c5 Sebastian Thiel <sthiel@thoughtworks.com> 1528880376 +0200	commit (amend): Don't preallocate commits anymore
+b1aaad196da7edf38f751127ef616fc940d866c5 30490fbbdd723f1130d6b50355f6490f9146bedb Sebastian Thiel <sthiel@thoughtworks.com> 1528880569 +0200	commit: unsafe commit lookup - need for speed, and it's safe
+30490fbbdd723f1130d6b50355f6490f9146bedb 056ea731c40a70b1ed342936d1da1b2b1dce9a41 Sebastian Thiel <sthiel@thoughtworks.com> 1528881916 +0200	commit: print completion message with stats
+056ea731c40a70b1ed342936d1da1b2b1dce9a41 6166ef51c19ea00d976bd16863a3489b6a2be1e7 Sebastian Thiel <sthiel@thoughtworks.com> 1528918953 +0200	commit: Multi-pass single-edge removal
+6166ef51c19ea00d976bd16863a3489b6a2be1e7 6dcaeec8434fb4f73ecfeec380a6b0682b72fdc0 Sebastian Thiel <sthiel@thoughtworks.com> 1528919188 +0200	commit: Better reporting of topo-simplification
+6dcaeec8434fb4f73ecfeec380a6b0682b72fdc0 d621c496e62404b885091a3b6072ab1d380bfe58 Sebastian Thiel <sthiel@thoughtworks.com> 1528922776 +0200	commit: Serialization and deserialization
+d621c496e62404b885091a3b6072ab1d380bfe58 85cfaf8dac58ef81ed2517db67b3b27c09ae9d97 Sebastian Thiel <sthiel@thoughtworks.com> 1528923801 +0200	commit: LZ4 compression for cache
+85cfaf8dac58ef81ed2517db67b3b27c09ae9d97 a7988851b7f4e5c31d094cb212784ff97f1a6a26 Sebastian Thiel <sthiel@thoughtworks.com> 1528925218 +0200	commit: Remove LZ4 - the writer implementation isn't good enough
+a7988851b7f4e5c31d094cb212784ff97f1a6a26 c31af5fcc0e98a806f53c61a897b812a57044532 Sebastian Thiel <sthiel@thoughtworks.com> 1528925407 +0200	revert: try again - Revert "Remove LZ4 - the writer implementation isn't good enough"
+c31af5fcc0e98a806f53c61a897b812a57044532 1f6e36a99335dd98c5b6f12ec4b8330f9b33d71f Sebastian Thiel <sthiel@thoughtworks.com> 1528925557 +0200	commit: Properly finish the LZ4 stream
+1f6e36a99335dd98c5b6f12ec4b8330f9b33d71f 1f6e36a99335dd98c5b6f12ec4b8330f9b33d71f Sebastian Thiel <sthiel@thoughtworks.com> 1528926128 +0200	checkout: moving from master to hEAD
+1f6e36a99335dd98c5b6f12ec4b8330f9b33d71f 1f6e36a99335dd98c5b6f12ec4b8330f9b33d71f Sebastian Thiel <sthiel@thoughtworks.com> 1528926134 +0200	checkout: moving from 1f6e36a99335dd98c5b6f12ec4b8330f9b33d71f to master
+1f6e36a99335dd98c5b6f12ec4b8330f9b33d71f 9ed749874ae036e5a347ae759f769c0e0831c228 Sebastian Thiel <sthiel@thoughtworks.com> 1528926272 +0200	commit (amend): Properly finish the LZ4 stream
+9ed749874ae036e5a347ae759f769c0e0831c228 79d5a0d695a6f835236dedc3ca6f7e91a8290deb Sebastian Thiel <sthiel@thoughtworks.com> 1528927858 +0200	commit: Don't optimize topology anymore unless it's proven to be correctly implemented
+79d5a0d695a6f835236dedc3ca6f7e91a8290deb b8556e08f14c1136570ff4baeee8d61174ee62e3 Sebastian Thiel <sthiel@thoughtworks.com> 1528954072 +0200	commit: Try to use optimization of topology again
+b8556e08f14c1136570ff4baeee8d61174ee62e3 9742d572aeb5756ce8fbc9e2c19209d406eb94e6 Sebastian Thiel <sthiel@thoughtworks.com> 1528954602 +0200	commit: Revert "Try to use optimization of topology again" -- no effect
+9742d572aeb5756ce8fbc9e2c19209d406eb94e6 79d5a0d695a6f835236dedc3ca6f7e91a8290deb Sebastian Thiel <sthiel@thoughtworks.com> 1528954767 +0200	reset: moving to HEAD~2
+79d5a0d695a6f835236dedc3ca6f7e91a8290deb b8556e08f14c1136570ff4baeee8d61174ee62e3 Sebastian Thiel <sthiel@thoughtworks.com> 1528954797 +0200	reset: moving to b8556e0
+b8556e08f14c1136570ff4baeee8d61174ee62e3 50f0b4bbd82da9aa5b6e8e7c9f33c01f32244dba Sebastian Thiel <sthiel@thoughtworks.com> 1528958508 +0200	commit: Multithreaded lookups
+50f0b4bbd82da9aa5b6e8e7c9f33c01f32244dba 0a106ca15a63d88b72c8871c36bfa2ac60f03ab1 Sebastian Thiel <sthiel@thoughtworks.com> 1528959240 +0200	commit: Remove explicit drop, more ideomatic
+0a106ca15a63d88b72c8871c36bfa2ac60f03ab1 8237443e23a192422f1ca98cc17366df458652e3 Sebastian Thiel <sthiel@thoughtworks.com> 1528960054 +0200	commit: Num threads from the commandline are respected
+8237443e23a192422f1ca98cc17366df458652e3 fbccab32ea7b393c3285b0e6f02ee3aaf7c7356d Sebastian Thiel <sthiel@thoughtworks.com> 1528996247 +0200	commit: factor out find module
+fbccab32ea7b393c3285b0e6f02ee3aaf7c7356d fbccab32ea7b393c3285b0e6f02ee3aaf7c7356d Sebastian Thiel <sthiel@thoughtworks.com> 1528997004 +0200	reset: moving to HEAD
+fbccab32ea7b393c3285b0e6f02ee3aaf7c7356d 024c7e833f3acfc30c88bc90f897995551880abf Sebastian Thiel <sthiel@thoughtworks.com> 1528997815 +0200	commit (amend): factor out find module
+024c7e833f3acfc30c88bc90f897995551880abf fbccab32ea7b393c3285b0e6f02ee3aaf7c7356d Sebastian Thiel <sthiel@thoughtworks.com> 1528997842 +0200	reset: moving to origin/master
+fbccab32ea7b393c3285b0e6f02ee3aaf7c7356d fbccab32ea7b393c3285b0e6f02ee3aaf7c7356d Sebastian Thiel <sthiel@thoughtworks.com> 1529014570 +0200	checkout: moving from master to master
+fbccab32ea7b393c3285b0e6f02ee3aaf7c7356d 7a84eac32f4548191e7a3ba26081921b51966ec1 Sebastian Thiel <sthiel@thoughtworks.com> 1529040455 +0200	commit: Don't do snapshot based testing - the output is based on the current repo right now
+7a84eac32f4548191e7a3ba26081921b51966ec1 40a1e7f822524afd4388a38518a411b6d3eb53d7 Sebastian Thiel <sthiel@thoughtworks.com> 1529040498 +0200	commit: Compact the commit-to-bits data structure for next step
+40a1e7f822524afd4388a38518a411b6d3eb53d7 b99effbcdec9617e0c922816f4110ef06ff1028d Sebastian Thiel <sthiel@thoughtworks.com> 1529040547 +0200	commit (amend): Compact the commit-to-bits data structure for next step

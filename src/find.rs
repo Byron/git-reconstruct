@@ -1,4 +1,4 @@
-use bv::BitVec;
+use fixedbitset::FixedBitSet;
 use failure::{Error, ResultExt};
 use std::path::Path;
 use walkdir::WalkDir;
@@ -14,7 +14,7 @@ use Options;
 
 const HASHING_PROGRESS_RATE: usize = 25;
 
-fn compact(c: Vec<BitVec<usize>>, graph: ReverseGraph) -> Vec<(Oid, BitVec<usize>)> {
+fn compact(c: Vec<FixedBitSet>, graph: ReverseGraph) -> Vec<(Oid, FixedBitSet)> {
     let mut nc = Vec::new();
     for (cid, bits) in c.into_iter().enumerate() {
         nc.push((graph.oid_of(cid), bits));
@@ -46,7 +46,7 @@ pub fn commit(tree: &Path, graph: ReverseGraph, opts: &Options) -> Result<(), Er
         }
     }
 
-    let mut commit_indices_to_blobs = vec![BitVec::<usize>::with_capacity(0); graph.len()];
+    let mut commit_indices_to_blobs = vec![FixedBitSet::with_capacity(0); graph.len()];
     let num_threads = opts.threads.unwrap_or(num_cpus::get_physical());
     crossbeam::scope(|scope| {
         let or = {
@@ -79,9 +79,9 @@ pub fn commit(tree: &Path, graph: ReverseGraph, opts: &Options) -> Result<(), Er
             for &commit_index in &commits {
                 let bits = unsafe { commit_indices_to_blobs.get_unchecked_mut(commit_index) };
                 if bits.len() == 0 {
-                    bits.resize(blobs.len() as u64, false);
+                    bits.grow(blobs.len());
                 }
-                bits.set(bid as u64, true);
+                bits.put(bid);
             }
             total_commits += commits.len();
             progress.set_message(&format!(

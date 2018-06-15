@@ -4,8 +4,8 @@ extern crate git2;
 extern crate indicatif;
 #[macro_use]
 extern crate structopt;
-extern crate bv;
 extern crate crossbeam;
+extern crate fixedbitset;
 extern crate num_cpus;
 extern crate walkdir;
 #[macro_use]

@@ -23,7 +23,7 @@ title "Frontend mode - find merge commit"
       (sandbox
         it "succeeds" && {
           WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-with-cache-save-success" \
-          expect_run ${SUCCESSFULLY} "$exe" --head-only --cache-path $cache_file "$root/.." "$fixture/tree"
+          expect_run ${SUCCESSFULLY} "$exe" --head-only --cache-path $cache_file "$fixture/repo" "$fixture/tree"
         }
         it "writes the cache" && {
           expect_exists $cache_file
@@ -32,7 +32,7 @@ title "Frontend mode - find merge commit"
         (when "finding the best commit with existing cache" 
           it "loads the cache and succeeds" && {
             WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-with-cache-load-success" \
-            expect_run ${SUCCESSFULLY} "$exe" --head-only --cache-path $cache_file "$root/.." "$fixture/tree"
+            expect_run ${SUCCESSFULLY} "$exe" --head-only --cache-path $cache_file "$fixture/repo" "$fixture/tree"
           }
         )
       )
@@ -40,7 +40,7 @@ title "Frontend mode - find merge commit"
     (with "no cache specified"
       it "succeeds" && {
         WITH_SNAPSHOT="$snapshot/generate-merge-commit-info-success" \
-        expect_run ${SUCCESSFULLY} "$exe" --head-only "$PWD" "$fixture/tree"
+        expect_run ${SUCCESSFULLY} "$exe" --head-only "$fixture/repo" "$fixture/tree"
       }
     )
   )
@@ -49,13 +49,13 @@ title "Frontend mode - find merge commit"
   (when "only iterating the current head (--head-only)"
     it "succeeds" && {
       echo $commit \
-      | expect_run ${SUCCESSFULLY} "$exe" --head-only "$PWD"
+      | expect_run ${SUCCESSFULLY} "$exe" --head-only "$fixture/repo"
     }
   )
   (when "iterating all remote heads"
     it "succeeds" && {
       echo $commit \
-      | expect_run ${SUCCESSFULLY} "$exe" "$PWD"
+      | expect_run ${SUCCESSFULLY} "$exe" "$fixture/repo"
     }
   )
 )

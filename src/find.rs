@@ -16,7 +16,7 @@ const HASHING_PROGRESS_RATE: usize = 25;
 
 fn compact(c: Vec<FixedBitSet>, graph: ReverseGraph) -> Vec<(Oid, FixedBitSet)> {
     let mut nc = Vec::new();
-    for (cid, bits) in c.into_iter().enumerate() {
+    for (cid, bits) in c.into_iter().enumerate().filter(|(_, b)| b.len() > 0) {
         nc.push((graph.oid_of(cid), bits));
     }
     nc.shrink_to_fit();
